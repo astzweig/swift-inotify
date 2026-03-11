@@ -16,9 +16,9 @@ func getEventsForTrigger(
 		return events
 	}
 
-	try await Task.sleep(for: .milliseconds(200))
+	try await Task.sleep(for: .milliseconds(100))
 	try await trigger(dir)
-	try await Task.sleep(for: .milliseconds(200))
+	try await Task.sleep(for: .milliseconds(500))
 
 	eventTask.cancel()
 	return await eventTask.value
