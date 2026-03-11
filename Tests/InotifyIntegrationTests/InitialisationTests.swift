@@ -4,6 +4,6 @@ import Testing
 @Suite("Initialisation")
 struct InitTests {
 	@Test func createsCleanly() async throws {
-		let _ = Inotify()
+		let _ = try Inotify()
 	}
 }

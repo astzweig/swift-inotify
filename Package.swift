@@ -22,9 +22,11 @@ let package = Package(
 		.package(url: "https://github.com/tuist/Noora", from: "0.55.1")
 	],
 	targets: [
+		.systemLibrary(name: "CInotify"),
 		.target(
 			name: "Inotify",
 			dependencies: [
+				"CInotify",
 				.product(name: "Logging", package: "swift-log"),
 			]
 		),
