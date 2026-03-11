@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <sys/inotify.h>
+#include <unistd.h>
 #include <errno.h>
 
 static inline int cinotify_deinit(int fd) {
