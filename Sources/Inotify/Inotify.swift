@@ -2,8 +2,8 @@ import Dispatch
 import CInotify
 
 public actor Inotify {
-	private let fd: Int32
-	private var watches: [Int32: String] = [:]
+	private let fd: CInt
+	private var watches: [CInt: String] = [:]
 	private var eventReader: any DispatchSourceRead
 	private var eventStream: AsyncStream<RawInotifyEvent>
 	public var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
@@ -11,7 +11,7 @@ public actor Inotify {
 	}
 
 	public init() throws {
-		self.fd = inotify_init1(Int32(IN_NONBLOCK | IN_CLOEXEC))
+		self.fd = inotify_init1(CInt(IN_NONBLOCK | IN_CLOEXEC))
 		guard self.fd >= 0 else {
 			throw InotifyError.initFailed(errno: cinotify_get_errno())
 		}
@@ -19,7 +19,7 @@ public actor Inotify {
 	}
 
 	@discardableResult
-	public func addWatch(path: String, mask: InotifyEventMask) throws -> Int32 {
+	public func addWatch(path: String, mask: InotifyEventMask) throws -> CInt {
 		let wd = inotify_add_watch(self.fd, path, mask.rawValue)
 		guard wd >= 0 else {
 			throw InotifyError.addWatchFailed(path: path, errno: cinotify_get_errno())
@@ -28,7 +28,7 @@ public actor Inotify {
 		return wd
 	}
 
-	public func removeWatch(_ wd: Int32) throws {
+	public func removeWatch(_ wd: CInt) throws {
 		guard inotify_rm_watch(self.fd, wd) == 0 else {
 			throw InotifyError.removeWatchFailed(watchDescriptor: wd, errno: cinotify_get_errno())
 		}
@@ -44,7 +44,7 @@ public actor Inotify {
 		return InotifyEvent.init(from: rawEvent, inDirectory: path)
 	}
 
-	private static func createEventReader(forFileDescriptor fd: Int32) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>) {
+	private static func createEventReader(forFileDescriptor fd: CInt) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>) {
 		let (stream, continuation) = AsyncStream<RawInotifyEvent>.makeStream(
 			of: RawInotifyEvent.self,
 			bufferingPolicy: .bufferingNewest(512)
