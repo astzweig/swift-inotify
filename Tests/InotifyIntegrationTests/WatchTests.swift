@@ -18,4 +18,19 @@ struct WatchTests {
 			try await watcher.addWatch(path: "/nonexistent-\(UUID())", mask: .allEvents)
 		}
 	}
+
+	@Test func removeWatchSucceeds() async throws {
+		try await withTempDir { dir in
+			let watcher = try Inotify()
+			let wd = try await watcher.addWatch(path: dir, mask: .allEvents)
+			try await watcher.removeWatch(wd)
+		}
+	}
+
+	@Test func removeInvalidWatchThrows() async throws {
+		let watcher = try Inotify()
+		await #expect(throws: InotifyError.self) {
+			try await watcher.removeWatch(9999)
+		}
+	}
 }

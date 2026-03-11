@@ -21,6 +21,13 @@ public actor Inotify {
 		return wd
 	}
 
+	public func removeWatch(_ wd: Int32) throws {
+		guard inotify_rm_watch(self.fd, wd) == 0 else {
+			throw InotifyError.removeWatchFailed(watchDescriptor: wd, errno: cinotify_get_errno())
+		}
+		watches.removeValue(forKey: wd)
+	}
+
 	deinit {
 		cinotify_deinit(self.fd)
 	}
