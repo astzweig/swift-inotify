@@ -28,6 +28,17 @@ public actor Inotify {
 		return wd
 	}
 
+	@discardableResult
+	public func addRecursiveWatch(forDirectory path: String, mask: InotifyEventMask) async throws -> [CInt] {
+		let directoryPaths = try await DirectoryResolver.resolve(path)
+		var result: [CInt] = []
+		for path in directoryPaths {
+			let wd = try self.addWatch(path: path.string, mask: mask)
+			result.append(wd)
+		}
+		return result
+	}
+
 	public func removeWatch(_ wd: CInt) throws {
 		guard inotify_rm_watch(self.fd, wd) == 0 else {
 			throw InotifyError.removeWatchFailed(watchDescriptor: wd, errno: cinotify_get_errno())

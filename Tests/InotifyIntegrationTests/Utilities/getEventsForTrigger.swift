@@ -3,10 +3,15 @@ import Inotify
 func getEventsForTrigger(
 	in dir: String,
 	mask: InotifyEventMask,
-	trigger: @escaping (String) async throws -> Void
+	recursive: Bool = false,
+	trigger: @escaping (String) async throws -> Void,
 ) async throws -> [InotifyEvent] {
 	let watcher = try Inotify()
-	try await watcher.addWatch(path: dir, mask: mask)
+	if recursive {
+		try await watcher.addRecursiveWatch(forDirectory: dir, mask: mask)
+	} else {
+		try await watcher.addWatch(path: dir, mask: mask)
+	}
 
 	let eventTask = Task {
 		var events: [InotifyEvent] = []
