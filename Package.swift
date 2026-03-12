@@ -36,7 +36,10 @@ let package = Package(
 		),
 		.testTarget(
 			name: "InotifyIntegrationTests",
-			dependencies: ["Inotify"],
+			dependencies: [
+				"Inotify",
+				.product(name: "SystemPackage", package: "swift-system")
+			],
 		),
 		.executableTarget(
 			name: "TaskCLI",

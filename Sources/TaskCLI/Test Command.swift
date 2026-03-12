@@ -24,7 +24,7 @@ struct TestCommand: AsyncParsableCommand {
 		logger.debug("Current directory", metadata: ["current-directory": "\(currentDirectory)"])
 		async let monitorResult = Subprocess.run(
 			.name("docker"),
-			arguments: ["run", "-v", "\(currentDirectory):/code", "--platform", "linux/arm64", "-w", "/code", "swift:latest", "swift", "test"],
+			arguments: ["run", "-v", "\(currentDirectory):/code", "--security-opt", "systempaths=unconfined", "--platform", "linux/arm64", "-w", "/code", "swift:latest", "/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"],
 			preferredBufferSize: 10,
 		) { execution, standardInput, standardOutput, standardError in
 			print("")
