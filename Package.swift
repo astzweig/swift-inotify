@@ -47,6 +47,7 @@ let package = Package(
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
 				.product(name: "Logging", package: "swift-log"),
+				.product(name: "_NIOFileSystem", package: "swift-nio"),
 				.product(name: "Subprocess", package: "swift-subprocess"),
 				.product(name: "Noora", package: "Noora")
 			]
