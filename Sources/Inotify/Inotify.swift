@@ -3,7 +3,7 @@ import CInotify
 
 public actor Inotify {
 	private let fd: CInt
-	private var watches: [CInt: String] = [:]
+	private var watches = InotifyWatchManager()
 	private var eventReader: any DispatchSourceRead
 	private var eventStream: AsyncStream<RawInotifyEvent>
 	public var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
@@ -24,7 +24,7 @@ public actor Inotify {
 		guard wd >= 0 else {
 			throw InotifyError.addWatchFailed(path: path, errno: cinotify_get_errno())
 		}
-		watches[wd] = path
+		watches.add(path, withId: wd)
 		return wd
 	}
 
@@ -43,7 +43,7 @@ public actor Inotify {
 		guard inotify_rm_watch(self.fd, wd) == 0 else {
 			throw InotifyError.removeWatchFailed(watchDescriptor: wd, errno: cinotify_get_errno())
 		}
-		watches.removeValue(forKey: wd)
+		watches.remove(forId: wd)
 	}
 
 	deinit {
@@ -51,7 +51,7 @@ public actor Inotify {
 	}
 
 	private func transform(_ rawEvent: RawInotifyEvent) -> InotifyEvent? {
-		guard let path = self.watches[rawEvent.watchDescriptor] else { return nil }
+		guard let path = self.watches.path(forId: rawEvent.watchDescriptor) else { return nil }
 		return InotifyEvent.init(from: rawEvent, inDirectory: path)
 	}
 
