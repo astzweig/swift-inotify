@@ -1,16 +1,25 @@
 import Inotify
 
+enum RecursivKind {
+	case nonrecursive
+	case recursive
+	case withAutomaticSubtreeWatching
+}
+
 func getEventsForTrigger(
 	in dir: String,
 	mask: InotifyEventMask,
-	recursive: Bool = false,
+	recursive: RecursivKind = .nonrecursive,
 	trigger: @escaping (String) async throws -> Void,
 ) async throws -> [InotifyEvent] {
 	let watcher = try Inotify()
-	if recursive {
-		try await watcher.addRecursiveWatch(forDirectory: dir, mask: mask)
-	} else {
+	switch recursive {
+	case .nonrecursive:
 		try await watcher.addWatch(path: dir, mask: mask)
+	case .recursive:
+		try await watcher.addRecursiveWatch(forDirectory: dir, mask: mask)
+	case .withAutomaticSubtreeWatching:
+		try await watcher.addWatchWithAutomaticSubtreeWatching(forDirectory: dir, mask: mask)
 	}
 
 	let eventTask = Task {

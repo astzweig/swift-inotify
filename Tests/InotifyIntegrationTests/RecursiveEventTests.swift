@@ -13,8 +13,28 @@ struct RecursiveEventTests {
 			let events = try await getEventsForTrigger(
 				in: dir,
 				mask: [.create],
-				recursive: true
+				recursive: .recursive
 			) { _ in try createFile(at: "\(filepath)", contents: "hello") }
+
+			let createEvent = events.first { $0.mask.contains(.create) && $0.path.string == filepath }
+			#expect(createEvent != nil, "Expected CREATE for '\(filepath)', got: \(events)")
+		}
+	}
+
+	@Test func newSubfoldersOfRecursiveWatchAreAutomaticallyWatchedToo() async throws {
+		try await withTempDir { dir in
+			let subDirectory = "\(dir)/Subfolder"
+			let filepath = "\(subDirectory)/modify-target.txt"
+
+			let events = try await getEventsForTrigger(
+				in: dir,
+				mask: [.create],
+				recursive: .withAutomaticSubtreeWatching
+			) { _ in
+				try FileManager.default.createDirectory(atPath: subDirectory, withIntermediateDirectories: true)
+				try await Task.sleep(for: .milliseconds(200))
+				try createFile(at: "\(filepath)", contents: "hello")
+			}
 
 			let createEvent = events.first { $0.mask.contains(.create) && $0.path.string == filepath }
 			#expect(createEvent != nil, "Expected CREATE for '\(filepath)', got: \(events)")
