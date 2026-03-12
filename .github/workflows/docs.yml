@@ -1,0 +1,61 @@
+name: Docs
+
+on:
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Pages
+      uses: actions/configure-pages@v5
+    - name: Set up Swift
+      uses: swift-actions/setup-swift@v3
+      with:
+        skip-verify-signature: true
+    - name: Generate Docs
+      run: |
+        swift package add-dependency --from 1.4.0 "https://github.com/apple/swift-docc-plugin.git"
+        for target in Inotify TaskCLI; do
+          lower="${target,,}"
+          mkdir -p "./public/$lower"
+          swift package --allow-writing-to-directory "./public/$lower" \
+            generate-documentation --disable-indexing --transform-for-static-hosting \
+            --target "$target" \
+            --hosting-base-path "swift-inotify/$lower" \
+            --output-path "./public/$lower"
+        done
+    - name: Copy Index Page
+      run: |
+        cp ./.github/workflows/index.tpl.html public/index.html
+        sed -i -e 's/{{project.name}}/Swift Inotify/g' public/index.html
+        sed -i -e 's/{{project.tagline}}/🗂️ Monitor filesystem events on Linux using modern Swift concurrency/g' public/index.html
+        sed -i -e 's|{{project.links}}|<li><a href="inotify/documentation/inotify/">Inotify</a>: The actual library.</li><li><a href="taskcli/documentation/taskcli/">TaskCLI</a>: The project build command.</li>|g' public/index.html
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v4
+      with:
+        path: ./public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: docs
+    steps:
+    - name: Deploy Docs
+      uses: actions/deploy-pages@v4
