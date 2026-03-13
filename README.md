@@ -125,18 +125,15 @@ Use `-v`, `-vv`, or `-vvv` to increase log verbosity. The command runs two passe
 
 Docker must be installed and running on your machine.
 
-## Documentation
+### Documentation
 
 Full API documentation is available as DocC catalogs bundled with the package. Generate them locally with:
 
 ```bash
-# Inotify library
-swift package generate-documentation --target Inotify
-
-# Task build tool
-swift package generate-documentation --target TaskCLI
+swift run task generate-docs
 ```
 
+Then open the files in the newly created `public` folder.
 Or preview in Xcode by selecting **Product > Build Documentation**.
 
 ## Requirements
