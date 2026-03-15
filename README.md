@@ -75,6 +75,24 @@ try await inotify.addWatchWithAutomaticSubtreeWatching(
 
 This is the most convenient option when you need full coverage of a growing directory tree.
 
+## Excluding Items
+
+You can tell the `Inotify` actor to ignore certain file or directory names. Excluded names are skipped during recursive directory resolution (so no watch is installed on them) and silently dropped from the event stream:
+
+```swift
+let inotify = try Inotify()
+
+// Ignore version-control and build directories
+await inotify.exclude(names: ".git", "node_modules", ".build")
+
+try await inotify.addWatchWithAutomaticSubtreeWatching(
+    forDirectory: "/home/user/project",
+    mask: [.create, .modify, .delete]
+)
+```
+
+Use `isExcluded(_:)` to check whether a name is currently on the exclusion list.
+
 ## Event Masks
 
 `InotifyEventMask` is an `OptionSet` that mirrors the native inotify flags. You can combine them freely.

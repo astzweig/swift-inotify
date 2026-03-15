@@ -3,42 +3,35 @@ import _NIOFileSystem
 public struct DirectoryResolver {
 	static let fileManager = FileSystem.shared
 
-	public static func resolve(_ paths: String...) async throws -> [FilePath] {
-		try await Self.resolve(paths)
+	public static func resolve(_ paths: String..., excluding itemNames: Set<String> = []) async throws -> [FilePath] {
+		try await Self.resolve(paths, excluding: itemNames)
 	}
 
-	static func resolve(_ paths: [String]) async throws -> [FilePath] {
+	static func resolve(_ paths: [String], excluding itemNames: Set<String> = []) async throws -> [FilePath] {
 		var resolved: [FilePath] = []
 
 		for path in paths {
-			let itemPath = FilePath(path)
-			try await Self.ensure(itemPath, is: .directory)
-
-			let allDirectoriesIncludingSelf = try await getAllSubdirectoriesAndSelf(at: itemPath)
-			resolved.append(contentsOf: allDirectoriesIncludingSelf)
+			let path = FilePath(path)
+			resolved.append(path)
+			try await withSubdirectories(at: path, recursive: true) { subdirectoryPath in
+				guard let basename = subdirectoryPath.lastComponent?.description else { return }
+				guard !itemNames.contains(basename) else { return }
+				resolved.append(subdirectoryPath)
+			}
 		}
 
 		return resolved
 	}
 
-	private static func ensure(_ path: FilePath, is fileType: FileType) async throws {
-		guard let fileInfo = try await fileManager.info(forFileAt: path) else {
-			throw DirectoryResolverError.pathNotFound(path)
-		}
-
-		guard fileInfo.type == fileType else {
-			throw DirectoryResolverError.pathIsNoDirectory(path)
-		}
-	}
-
-	private static func getAllSubdirectoriesAndSelf(at path: FilePath) async throws -> [FilePath] {
-		var result: [FilePath] = []
+	private static func withSubdirectories(at path: FilePath, recursive: Bool = false, body: (FilePath) async throws -> Void) async throws {
 		let directoryHandle = try await fileManager.openDirectory(atPath: path)
-		for try await childContent in directoryHandle.listContents(recursive: true) {
+		for try await childContent in directoryHandle.listContents() {
 			guard childContent.type == .directory else { continue }
-			result.append(childContent.path)
+			try await body(childContent.path)
+			if recursive {
+				try await withSubdirectories(at: childContent.path, recursive: recursive, body: body)
+			}
 		}
 		try await directoryHandle.close()
-		return result
 	}
 }

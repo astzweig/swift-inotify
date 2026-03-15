@@ -3,6 +3,7 @@ import CInotify
 
 public actor Inotify {
 	private let fd: CInt
+	private var excludedItemNames: Set<String> = []
 	private var watches = InotifyWatchManager()
 	private var eventReader: any DispatchSourceRead
 	private var eventStream: AsyncStream<RawInotifyEvent>
@@ -18,6 +19,24 @@ public actor Inotify {
 		(self.eventReader, self.eventStream) = Self.createEventReader(forFileDescriptor: fd)
 	}
 
+	public func isExcluded(_ name: String) -> Bool {
+		self.excludedItemNames.contains(name)
+	}
+
+	public func exclude(name: String) {
+		self.excludedItemNames.insert(name)
+	}
+
+	public func exclude(names: String...) {
+		self.exclude(names: names)
+	}
+
+	public func exclude(names: [String]) {
+		for name in names {
+			self.excludedItemNames.insert(name)
+		}
+	}
+
 	@discardableResult
 	public func addWatch(path: String, mask: InotifyEventMask) throws -> CInt {
 		let wd = inotify_add_watch(self.fd, path, mask.rawValue)
@@ -30,7 +49,7 @@ public actor Inotify {
 
 	@discardableResult
 	public func addRecursiveWatch(forDirectory path: String, mask: InotifyEventMask) async throws -> [CInt] {
-		let directoryPaths = try await DirectoryResolver.resolve(path)
+		let directoryPaths = try await DirectoryResolver.resolve(path, excluding: self.excludedItemNames)
 		var result: [CInt] = []
 		for path in directoryPaths {
 			let wd = try self.addWatch(path: path.string, mask: mask)
@@ -59,6 +78,7 @@ public actor Inotify {
 
 	private func transform(_ rawEvent: RawInotifyEvent) async -> InotifyEvent? {
 		guard let path = self.watches.path(forId: rawEvent.watchDescriptor) else { return nil }
+		guard !self.excludedItemNames.contains(rawEvent.name) else { return nil }
 		let event = InotifyEvent.init(from: rawEvent, inDirectory: path)
 		await self.addWatchInCaseOfAutomaticSubtreeWatching(event)
 		return InotifyEvent.init(from: rawEvent, inDirectory: path)

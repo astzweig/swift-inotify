@@ -33,6 +33,22 @@ let descriptors = try await inotify.addWatchWithAutomaticSubtreeWatching(
 
 Internally this listens for `CREATE` events carrying the ``InotifyEventMask/isDir`` flag and installs a new watch with the same mask whenever a subdirectory appears.
 
+### Excluding Directories
+
+When watching large trees you often want to skip certain subdirectories entirely — version-control metadata, build artefacts, dependency caches, and so on. Call ``Inotify/Inotify/exclude(names:)`` **before** adding a recursive or automatic-subtree watch:
+
+```swift
+let inotify = try Inotify()
+await inotify.exclude(names: ".git", "node_modules", ".build")
+
+try await inotify.addWatchWithAutomaticSubtreeWatching(
+    forDirectory: "/home/user/project",
+    mask: .allEvents
+)
+```
+
+Excluded names are matched against the last path component of each directory during resolution and are also filtered from the event stream, so you never receive events for items whose name is on the exclusion list.
+
 ### Choosing the Right Method
 
 | Method | Covers existing subdirectories | Covers new subdirectories |

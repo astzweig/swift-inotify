@@ -21,6 +21,24 @@ struct RecursiveEventTests {
 		}
 	}
 
+	@Test func ignoresFileCreationInIgnoredSubfolder() async throws {
+		try await withTempDir { dir in
+			let subDirectory = "\(dir)/Subfolder"
+			let filepath = "\(subDirectory)/modify-target.txt"
+			try FileManager.default.createDirectory(atPath: subDirectory, withIntermediateDirectories: true)
+
+			let events = try await getEventsForTrigger(
+				in: dir,
+				mask: [.create],
+				recursive: .recursive,
+				exclude: ["Subfolder"]
+			) { _ in try createFile(at: "\(filepath)", contents: "hello") }
+
+			let createEvent = events.first { $0.mask.contains(.create) && $0.path.string == filepath }
+			#expect(createEvent == nil, "Did not expect CREATE for '\(filepath)', got: \(events)")
+		}
+	}
+
 	@Test func newSubfoldersOfRecursiveWatchAreAutomaticallyWatchedToo() async throws {
 		try await withTempDir { dir in
 			let subDirectory = "\(dir)/Subfolder"
@@ -32,7 +50,7 @@ struct RecursiveEventTests {
 				recursive: .withAutomaticSubtreeWatching
 			) { _ in
 				try FileManager.default.createDirectory(atPath: subDirectory, withIntermediateDirectories: true)
-				try await Task.sleep(for: .milliseconds(200))
+				try await Task.sleep(for: .milliseconds(400))
 				try createFile(at: "\(filepath)", contents: "hello")
 			}
 

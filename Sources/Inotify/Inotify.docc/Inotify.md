@@ -20,6 +20,8 @@ Beyond single-directory watches, the library provides two higher-level methods f
 - ``Inotify/Inotify/addRecursiveWatch(forDirectory:mask:)`` installs watches on every existing subdirectory at setup time.
 - ``Inotify/Inotify/addWatchWithAutomaticSubtreeWatching(forDirectory:mask:)`` does the same **and** automatically watches subdirectories that are created after setup.
 
+You can also exclude certain file or directory names so that they are skipped during directory resolution and silently dropped from the event stream. See ``Inotify/Inotify/exclude(names:)`` and <doc:WatchingDirectoryTrees> for details.
+
 All public types conform to `Sendable`, so they can be safely passed across concurrency boundaries.
 
 ## Topics
@@ -29,6 +31,10 @@ All public types conform to `Sendable`, so they can be safely passed across conc
 - ``Inotify/Inotify``
 - ``InotifyEvent``
 - ``InotifyEventMask``
+
+### Articles
+
+- <doc:WatchingDirectoryTrees>
 
 ### Errors
 
