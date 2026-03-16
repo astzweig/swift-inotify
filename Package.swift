@@ -8,10 +8,6 @@ let package = Package(
 		.library(
 			name: "Inotify",
 			targets: ["Inotify"]
-		),
-		.executable(
-			name: "task",
-			targets: ["TaskCLI"]
 		)
 	],
 	dependencies: [
@@ -42,7 +38,7 @@ let package = Package(
 			],
 		),
 		.executableTarget(
-			name: "TaskCLI",
+			name: "InotifyTaskCLI",
 			dependencies: [
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
@@ -50,7 +46,8 @@ let package = Package(
 				.product(name: "_NIOFileSystem", package: "swift-nio"),
 				.product(name: "Subprocess", package: "swift-subprocess"),
 				.product(name: "Noora", package: "Noora")
-			]
+			],
+			path: "Sources/TaskCLI"
 		)
 	]
 )

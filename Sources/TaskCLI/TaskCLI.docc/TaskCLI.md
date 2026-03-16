@@ -1,4 +1,4 @@
-# ``TaskCLI``
+# ``InotifyTaskCLI``
 
 The build tool for the Swift Inotify project.
 
@@ -6,10 +6,14 @@ The build tool for the Swift Inotify project.
 
 `TaskCLI` is a small command-line executable (exposed as `task` in `Package.swift`) that automates project-level workflows. Its primary purpose is running integration tests and generating documentation inside Linux Docker containers, so you can validate inotify-dependent code on the correct platform even when developing on macOS.
 
+Because of a Swift Package Manager Bug in the [package dependency resolution][swiftpm-bug], the executable needs to be run using the `task.sh` shell script.
+
+[swiftpm-bug]: https://github.com/swiftlang/swift-package-manager/issues/8482
+
 ### Running the Tests
 
 ```bash
-swift run task test
+./task.sh test
 ```
 
 This launches a `swift:latest` Docker container with the repository mounted at `/code`, then executes two test passes:
@@ -22,7 +26,7 @@ The container is started with `--security-opt systempaths=unconfined` so that th
 ### Generating Documentation
 
 ```bash
-swift run task generate-documentation
+./task.sh generate-documentation
 ```
 
 This copies the project to a temporary directory, injects the `swift-docc-plugin` dependency via `swift package add-dependency` (if absent), and runs documentation generation inside a `swift:latest` Docker container. The resulting static sites are written to `./public/inotify/` and `./public/taskcli/`, ready for deployment to GitHub Pages.

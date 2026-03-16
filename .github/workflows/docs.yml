@@ -30,7 +30,7 @@ jobs:
     - name: Generate Docs
       run: |
         swift package add-dependency --from 1.4.0 "https://github.com/apple/swift-docc-plugin.git"
-        for target in Inotify TaskCLI; do
+        for target in Inotify InotifyTaskCLI; do
           lower="${target,,}"
           mkdir -p "./public/$lower"
           swift package --allow-writing-to-directory "./public/$lower" \
@@ -44,7 +44,7 @@ jobs:
         cp ./.github/workflows/index.tpl.html public/index.html
         sed -i -e 's/{{project.name}}/Swift Inotify/g' public/index.html
         sed -i -e 's/{{project.tagline}}/🗂️ Monitor filesystem events on Linux using modern Swift concurrency/g' public/index.html
-        sed -i -e 's|{{project.links}}|<li><a href="inotify/documentation/inotify/">Inotify</a>: The actual library.</li><li><a href="taskcli/documentation/taskcli/">TaskCLI</a>: The project build command.</li>|g' public/index.html
+        sed -i -e 's|{{project.links}}|<li><a href="inotify/documentation/inotify/">Inotify</a>: The actual library.</li><li><a href="inotifytaskcli/documentation/inotifytaskcli/">TaskCLI</a>: The project build command.</li>|g' public/index.html
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v4
       with:

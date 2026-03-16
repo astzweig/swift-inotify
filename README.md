@@ -132,11 +132,14 @@ try inotify.removeWatch(wd)
 ## Build Tool
 
 The package ships with a `task` executable (the `TaskCLI` target) that serves as the project's build tool. It automates running tests and generating documentation inside Linux Docker containers, so you can validate everything on the correct platform even when developing on macOS.
+Because of a Swift Package Manager Bug in the [package dependency resolution][swiftpm-bug], the executable needs to be run using the `task.sh` shell script.
+
+[swiftpm-bug]: https://github.com/swiftlang/swift-package-manager/issues/8482
 
 ### Tests
 
 ```bash
-swift run task test
+./task.sh test
 ```
 
 Use `-v`, `-vv`, or `-vvv` to increase log verbosity. The command runs two passes: first all tests except `InotifyLimitTests`, then only `InotifyLimitTests` (which manipulate system-level inotify limits and need to run in isolation).
@@ -148,7 +151,7 @@ Docker must be installed and running on your machine.
 Full API documentation is available as DocC catalogs bundled with the package. Generate them locally with:
 
 ```bash
-swift run task generate-docs
+./task.sh generate-docs
 ```
 
 Then open the files in the newly created `public` folder.

@@ -90,7 +90,7 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 			("{{project.tagline}}", "🗂️ Monitor filesystem events on Linux using modern Swift concurrency"),
 			("{{project.links}}", """
 				<li><a href="inotify/documentation/inotify/">Inotify</a>: The actual library.</li>\
-				<li><a href="taskcli/documentation/taskcli/">TaskCLI</a>: The project build command.</li>
+				<li><a href="inotifytaskcli/documentation/inotifytaskcli/">TaskCLI</a>: The project build command.</li>
 				"""),
 		]
 
@@ -106,9 +106,32 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 	}
 
 	private static func targets(for projectDirectory: URL) async throws -> [String] {
-		let sourcesDirectory = projectDirectory.appending(path: "Sources").path
-		let testsDirectory = projectDirectory.appending(path: "Tests").path
-		return try await DoccFinder.getTargetsWithDocumentation(at: sourcesDirectory, testsDirectory)
+		let packages = try await Self.packageTargets()
+		var packagesWithDoccFolder: [(name: String, path: String)] = []
+		for package in packages {
+			guard try await DoccFinder.hasDoccFolder(at: package.path) else { continue }
+			packagesWithDoccFolder.append(package)
+		}
+		return packagesWithDoccFolder.map { $0.name }
+	}
+
+	private static func packageTargets() async throws -> [(name: String, path: String)] {
+		let packageDescription = try await Subprocess.run(
+			.name("swift"),
+			arguments: ["package", "describe", "--type", "json"],
+			output: .data(limit: 20_000)
+		)
+
+		struct PackageDescription: Codable {
+			let targets: [Target]
+		}
+		struct Target: Codable {
+			let name: String
+			let path: String
+		}
+
+		let package = try JSONDecoder().decode(PackageDescription.self, from: packageDescription.standardOutput)
+		return package.targets.map { ($0.name, $0.path) }
 	}
 
 	private static func makeRunScript(for targets: [String]) -> String {

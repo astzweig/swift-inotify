@@ -3,27 +3,15 @@ import _NIOFileSystem
 public struct DoccFinder {
 	static let fileManager = FileSystem.shared
 
-	public static func getTargetsWithDocumentation(at paths: String...) async throws -> [String] {
-		try await Self.getTargetsWithDocumentation(at: paths)
-	}
+	public static func hasDoccFolder(at path: String) async throws -> Bool {
+		let itemPath = FilePath(path)
+		var hasDoccFolder = false
 
-	static func getTargetsWithDocumentation(at paths: [String]) async throws -> [String] {
-		var resolved: [String] = []
-
-		for path in paths {
-			let itemPath = FilePath(path)
-
-			try await withSubdirectories(at: itemPath) { targetPath in
-				print("Target path is", targetPath.description)
-				try await withSubdirectories(at: targetPath) { subdirectory in
-					guard subdirectory.description.hasSuffix(".docc") else { return }
-					guard let target = targetPath.lastComponent?.description else { return }
-					resolved.append(target)
-				}
-			}
+		try await withSubdirectories(at: itemPath) { subdirectory in
+			guard subdirectory.description.hasSuffix(".docc") else { return }
+			hasDoccFolder = true
 		}
-
-		return resolved
+		return hasDoccFolder
 	}
 
 	private static func withSubdirectories(at path: FilePath, body: (FilePath) async throws -> Void) async throws {
