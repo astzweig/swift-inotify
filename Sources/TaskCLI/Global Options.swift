@@ -1,4 +1,4 @@
-import ArgumentParser
+import Script
 import Logging
 
 struct GlobalOptions: ParsableArguments {

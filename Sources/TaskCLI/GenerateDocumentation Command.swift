@@ -1,11 +1,9 @@
-import ArgumentParser
-import AsyncAlgorithms
 import Foundation
 import Logging
+import Script
 import Noora
-import Subprocess
 
-struct GenerateDocumentationCommand: AsyncParsableCommand {
+struct GenerateDocumentationCommand: Script {
 	static let configuration = CommandConfiguration(
 		commandName: "generate-documentation",
 		abstract: "Generate DocC documentation of all targets inside a Linux container.",
@@ -25,6 +23,7 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 		let logger = global.makeLogger(labeled: "swift-inotify.cli.task.generate-documentation")
 		let fileManager = FileManager.default
 		let projectDirectory = URL(fileURLWithPath: fileManager.currentDirectoryPath)
+		let docker = try await executable(named: "docker")
 
 		let targets = try await Self.targets(for: projectDirectory)
 
@@ -43,28 +42,16 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 		let script = Self.makeRunScript(for: targets)
 
 		logger.debug("Container script", metadata: ["script": "\(script)"])
-		let dockerResult = try await Subprocess.run(
-			.name("docker"),
-			arguments: [
+		do {
+			try await docker(
 				"run", "--rm",
-				"-v", "\(tempDirectory.path(percentEncoded: false)):/code",
+				"-v", "\(tempDirectory.path):/code",
 				"--platform", "linux/arm64",
 				"-w", "/code",
 				"swift:latest",
 				"/bin/bash", "-c", script,
-			],
-			preferredBufferSize: 10,
-		) { execution, standardInput, standardOutput, standardError in
-			print("")
-			let stdout = standardOutput.lines()
-			let stderr = standardError.lines()
-			for try await line in merge(stdout, stderr) {
-				noora.passthrough("\(line)")
-			}
-			print("")
-		}
-
-		guard dockerResult.terminationStatus.isSuccess else {
+			)
+		} catch {
 			noora.error("Documentation generation failed.")
 			return
 		}
@@ -116,11 +103,10 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 	}
 
 	private static func packageTargets() async throws -> [(name: String, path: String)] {
-		let packageDescription = try await Subprocess.run(
-			.name("swift"),
-			arguments: ["package", "describe", "--type", "json"],
-			output: .data(limit: 20_000)
-		)
+		let swift = try await executable(named: "swift")
+		let packageDescriptionOutput = try await outputOf {
+			try await swift("package", "describe", "--type", "json")
+		}
 
 		struct PackageDescription: Codable {
 			let targets: [Target]
@@ -130,7 +116,8 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 			let path: String
 		}
 
-		let package = try JSONDecoder().decode(PackageDescription.self, from: packageDescription.standardOutput)
+		let data = Data(packageDescriptionOutput.utf8)
+		let package = try JSONDecoder().decode(PackageDescription.self, from: data)
 		return package.targets.map { ($0.name, $0.path) }
 	}
 
@@ -175,15 +162,13 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 	// MARK: - Dependency Injection
 
 	private func injectDoccPluginDependency(in directory: URL, logger: Logger) async throws {
-		let result = try await Subprocess.run(
-			.name("swift"),
-			arguments: [
+		let swift = try await executable(named: "swift")
+		do {
+			try await swift(
 				"package", "--package-path", directory.path(percentEncoded: false),
 				"add-dependency", "--from", Self.doccPluginMinVersion, Self.doccPluginURL
-			],
-		) { _ in }
-
-		guard result.terminationStatus.isSuccess else {
+			)
+		} catch {
 			throw GenerateDocumentationError.dependencyInjectionFailed
 		}
 
