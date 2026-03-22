@@ -46,6 +46,7 @@ struct GenerateDocumentationCommand: Script {
 			try await docker(
 				"run", "--rm",
 				"-v", "\(tempDirectory.path):/code",
+				"-v", "swift-inotify-build-cache:/code/.build",
 				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code",
 				"swift:latest",

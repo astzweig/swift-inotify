@@ -25,6 +25,7 @@ struct TestCommand: Script {
 			try await docker(
 				"run",
 				"-v", "\(currentDirectory):/code",
+				"-v", "swift-inotify-build-cache:/code/.build",
 				"--security-opt", "systempaths=unconfined",
 				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code", "swift:latest",
