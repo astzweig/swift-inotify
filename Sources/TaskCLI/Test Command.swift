@@ -26,7 +26,7 @@ struct TestCommand: Script {
 				"run",
 				"-v", "\(currentDirectory):/code",
 				"--security-opt", "systempaths=unconfined",
-				"--platform", "linux/arm64",
+				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code", "swift:latest",
 				"/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"
 			)
