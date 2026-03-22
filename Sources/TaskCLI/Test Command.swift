@@ -1,10 +1,8 @@
-import ArgumentParser
-import AsyncAlgorithms
 import Foundation
-import Subprocess
+import Script
 import Noora
 
-struct TestCommand: AsyncParsableCommand {
+struct TestCommand: Script {
 	static let configuration = CommandConfiguration(
 		commandName: "test",
 		abstract: "Run swift test in a linux container.",
@@ -19,26 +17,21 @@ struct TestCommand: AsyncParsableCommand {
 		let noora = Noora()
 		let logger = global.makeLogger(labeled: "swift-inotify.cli.task.test")
 		let currentDirectory = FileManager.default.currentDirectoryPath
+		let docker = try await executable(named: "docker")
 
 		noora.info("Running tests on Linux.")
 		logger.debug("Current directory", metadata: ["current-directory": "\(currentDirectory)"])
-		async let monitorResult = Subprocess.run(
-			.name("docker"),
-			arguments: ["run", "-v", "\(currentDirectory):/code", "--security-opt", "systempaths=unconfined", "--platform", "linux/arm64", "-w", "/code", "swift:latest", "/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"],
-			preferredBufferSize: 10,
-		) { execution, standardInput, standardOutput, standardError in
-			print("")
-			let stdout = standardOutput.lines()
-			let stderr = standardError.lines()
-			for try await line in merge(stdout, stderr) {
-				noora.passthrough("\(line)")
-			}
-			print("")
-		}
-
-		if (try await monitorResult.terminationStatus.isSuccess) {
+		do {
+			try await docker(
+				"run",
+				"-v", "\(currentDirectory):/code",
+				"--security-opt", "systempaths=unconfined",
+				"--platform", "linux/arm64",
+				"-w", "/code", "swift:latest",
+				"/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"
+			)
 			noora.success("All tests completed successfully.")
-		} else {
+		} catch {
 			noora.error("Not all tests completed successfully.")
 		}
 	}
