@@ -6,8 +6,8 @@ public actor Inotify {
 	private var excludedItemNames: Set<String> = []
 	private var watches = InotifyWatchManager()
 	private var eventReader: any DispatchSourceRead
-	private var eventStream: AsyncStream<RawInotifyEvent>
-	public var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
+	private nonisolated let eventStream: AsyncStream<RawInotifyEvent>
+	public nonisolated var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
 		self.eventStream.compactMap(self.transform(_:))
 	}
 
