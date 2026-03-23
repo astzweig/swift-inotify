@@ -1,4 +1,4 @@
-import Script
+import ArgumentParser
 
 @main
 struct Command: AsyncParsableCommand {

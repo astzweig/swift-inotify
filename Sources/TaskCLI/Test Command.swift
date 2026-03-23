@@ -1,8 +1,9 @@
+import ArgumentParser
 import Foundation
-import Script
 import Noora
+import Subprocess
 
-struct TestCommand: Script {
+struct TestCommand: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "test",
 		abstract: "Run swift test in a linux container.",
@@ -17,12 +18,12 @@ struct TestCommand: Script {
 		let noora = Noora()
 		let logger = global.makeLogger(labeled: "swift-inotify.cli.task.test")
 		let currentDirectory = FileManager.default.currentDirectoryPath
-		let docker = try await executable(named: "docker")
 
 		noora.info("Running tests on Linux.")
 		logger.debug("Current directory", metadata: ["current-directory": "\(currentDirectory)"])
-		do {
-			try await docker(
+		let dockerRunResult = try await Subprocess.run(
+			.name("docker"),
+			arguments: [
 				"run",
 				"-v", "\(currentDirectory):/code",
 				"-v", "swift-inotify-build-cache:/code/.build",
@@ -30,9 +31,13 @@ struct TestCommand: Script {
 				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code", "swift:latest",
 				"/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"
-			)
+			],
+			output: .standardOutput,
+			error: .standardError
+		)
+		if dockerRunResult.terminationStatus.isSuccess {
 			noora.success("All tests completed successfully.")
-		} catch {
+		} else {
 			noora.error("Not all tests completed successfully.")
 		}
 	}

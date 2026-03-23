@@ -11,10 +11,11 @@ let package = Package(
 		)
 	],
 	dependencies: [
+		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
 		.package(url: "https://github.com/apple/swift-log", from: "1.10.1"),
 		.package(url: "https://github.com/apple/swift-nio", from: "2.95.0"),
 		.package(url: "https://github.com/apple/swift-system", from: "1.6.4"),
-		.package(url: "https://github.com/GeorgeLyon/Shwift", from: "3.1.1"),
+		.package(url: "https://github.com/swiftlang/swift-subprocess.git", from: "0.3.0"),
 		.package(url: "https://github.com/tuist/Noora", from: "0.55.1")
 	],
 	targets: [
@@ -38,9 +39,10 @@ let package = Package(
 		.executableTarget(
 			name: "InotifyTaskCLI",
 			dependencies: [
+				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "_NIOFileSystem", package: "swift-nio"),
-				.product(name: "Script", package: "Shwift"),
+				.product(name: "Subprocess", package: "swift-subprocess"),
 				.product(name: "Noora", package: "Noora")
 			],
 			path: "Sources/TaskCLI"

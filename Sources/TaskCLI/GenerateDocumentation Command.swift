@@ -1,9 +1,10 @@
+import ArgumentParser
 import Foundation
 import Logging
-import Script
 import Noora
+import Subprocess
 
-struct GenerateDocumentationCommand: Script {
+struct GenerateDocumentationCommand: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "generate-documentation",
 		abstract: "Generate DocC documentation of all targets inside a Linux container.",
@@ -23,7 +24,6 @@ struct GenerateDocumentationCommand: Script {
 		let logger = global.makeLogger(labeled: "swift-inotify.cli.task.generate-documentation")
 		let fileManager = FileManager.default
 		let projectDirectory = URL(fileURLWithPath: fileManager.currentDirectoryPath)
-		let docker = try await executable(named: "docker")
 
 		let targets = try await Self.targets(for: projectDirectory)
 
@@ -42,17 +42,21 @@ struct GenerateDocumentationCommand: Script {
 		let script = Self.makeRunScript(for: targets)
 
 		logger.debug("Container script", metadata: ["script": "\(script)"])
-		do {
-			try await docker(
+		let dockerRunResult = try await Subprocess.run(
+			.name("docker"),
+			arguments: [
 				"run", "--rm",
 				"-v", "\(tempDirectory.path):/code",
 				"-v", "swift-inotify-build-cache:/code/.build",
 				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code",
 				"swift:latest",
-				"/bin/bash", "-c", script,
-			)
-		} catch {
+				"/bin/bash", "-c", script
+			],
+			output: .standardOutput,
+			error: .standardError
+		)
+		if !dockerRunResult.terminationStatus.isSuccess {
 			noora.error("Documentation generation failed.")
 			return
 		}
@@ -104,10 +108,12 @@ struct GenerateDocumentationCommand: Script {
 	}
 
 	private static func packageTargets() async throws -> [(name: String, path: String)] {
-		let swift = try await executable(named: "swift")
-		let packageDescriptionOutput = try await outputOf {
-			try await swift("package", "describe", "--type", "json")
-		}
+		let packageDescriptionResult = try await Subprocess.run(
+			.name("swift"),
+			arguments: ["package", "describe", "--type", "json"],
+			output: .data(limit: 10_000),
+			error: .standardError
+		)
 
 		struct PackageDescription: Codable {
 			let targets: [Target]
@@ -117,8 +123,11 @@ struct GenerateDocumentationCommand: Script {
 			let path: String
 		}
 
-		let data = Data(packageDescriptionOutput.utf8)
-		let package = try JSONDecoder().decode(PackageDescription.self, from: data)
+		if !packageDescriptionResult.terminationStatus.isSuccess {
+			throw GenerateDocumentationError.unableToReadPackageDescription
+		}
+
+		let package = try JSONDecoder().decode(PackageDescription.self, from: packageDescriptionResult.standardOutput)
 		return package.targets.map { ($0.name, $0.path) }
 	}
 
@@ -163,13 +172,16 @@ struct GenerateDocumentationCommand: Script {
 	// MARK: - Dependency Injection
 
 	private func injectDoccPluginDependency(in directory: URL, logger: Logger) async throws {
-		let swift = try await executable(named: "swift")
-		do {
-			try await swift(
+		let swiftRunResult = try await Subprocess.run(
+			.name("swift"),
+			arguments: [
 				"package", "--package-path", directory.path(percentEncoded: false),
 				"add-dependency", "--from", Self.doccPluginMinVersion, Self.doccPluginURL
-			)
-		} catch {
+			],
+			output: .standardOutput,
+			error: .standardError
+		)
+		if !swiftRunResult.terminationStatus.isSuccess {
 			throw GenerateDocumentationError.dependencyInjectionFailed
 		}
 
@@ -179,11 +191,14 @@ struct GenerateDocumentationCommand: Script {
 
 enum GenerateDocumentationError: Error, CustomStringConvertible {
 	case dependencyInjectionFailed
+	case unableToReadPackageDescription
 
 	var description: String {
 		switch self {
 		case .dependencyInjectionFailed:
 			"Failed to add swift-docc-plugin dependency to Package.swift."
+		case .unableToReadPackageDescription:
+			"Failed to read the package description."
 		}
 	}
 }
