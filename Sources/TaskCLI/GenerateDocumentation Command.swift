@@ -53,8 +53,8 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 				"swift:latest",
 				"/bin/bash", "-c", script
 			],
-			output: .standardOutput,
-			error: .standardError
+			output: .currentStandardOutput,
+			error: .currentStandardError
 		)
 		if !dockerRunResult.terminationStatus.isSuccess {
 			noora.error("Documentation generation failed.")
@@ -112,7 +112,7 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 			.name("swift"),
 			arguments: ["package", "describe", "--type", "json"],
 			output: .data(limit: 10_000),
-			error: .standardError
+			error: .currentStandardError
 		)
 
 		struct PackageDescription: Codable {
@@ -178,8 +178,8 @@ struct GenerateDocumentationCommand: AsyncParsableCommand {
 				"package", "--package-path", directory.path(percentEncoded: false),
 				"add-dependency", "--from", Self.doccPluginMinVersion, Self.doccPluginURL
 			],
-			output: .standardOutput,
-			error: .standardError
+			output: .currentStandardOutput,
+			error: .currentStandardError
 		)
 		if !swiftRunResult.terminationStatus.isSuccess {
 			throw GenerateDocumentationError.dependencyInjectionFailed

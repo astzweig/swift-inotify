@@ -32,8 +32,8 @@ struct TestCommand: AsyncParsableCommand {
 				"-w", "/code", "swift:latest",
 				"/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"
 			],
-			output: .standardOutput,
-			error: .standardError
+			output: .currentStandardOutput,
+			error: .currentStandardError
 		)
 		if dockerRunResult.terminationStatus.isSuccess {
 			noora.success("All tests completed successfully.")
