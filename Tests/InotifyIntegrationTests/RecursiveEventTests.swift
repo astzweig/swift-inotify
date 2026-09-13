@@ -58,4 +58,29 @@ struct RecursiveEventTests {
 			#expect(createEvent != nil, "Expected CREATE for '\(filepath)', got: \(events)")
 		}
 	}
+
+	@Test func stopsReportingForDirectoriesMovedOutOfTheWatchedTree() async throws {
+		try await withTempDir { dir in
+			let root = "\(dir)/Root"
+			let outside = "\(dir)/Outside"
+			let movedSource = "\(root)/Moved"
+			let movedDestination = "\(outside)/Moved"
+			let filename = "created-after-move.txt"
+			try FileManager.default.createDirectory(atPath: movedSource, withIntermediateDirectories: true)
+			try FileManager.default.createDirectory(atPath: outside, withIntermediateDirectories: true)
+
+			let events = try await getEventsForTrigger(
+				in: root,
+				mask: [.create, .movedFrom],
+				recursive: .withAutomaticSubtreeWatching
+			) { _ in
+				try FileManager.default.moveItem(atPath: movedSource, toPath: movedDestination)
+				try await Task.sleep(for: .milliseconds(400))
+				try createFile(at: "\(movedDestination)/\(filename)", contents: "hello")
+			}
+
+			let staleEvent = events.first { $0.mask.contains(.create) && $0.path.lastComponent?.string == filename }
+			#expect(staleEvent == nil, "Did not expect CREATE for '\(filename)' after its directory left the tree, got: \(events)")
+		}
+	}
 }

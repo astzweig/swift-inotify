@@ -99,8 +99,30 @@ public actor Inotify {
 		guard let path = self.watches.path(forId: rawEvent.watchDescriptor) else { return nil }
 		guard !self.excludedItemNames.contains(rawEvent.name) else { return nil }
 		let event = InotifyEvent.init(from: rawEvent, inDirectory: path)
+		self.forgetWatchInCaseTheKernelRemovedIt(event)
+		self.removeWatchesInCaseADirectoryLeftTheTree(event)
 		await self.addWatchInCaseOfAutomaticSubtreeWatching(event)
-		return InotifyEvent.init(from: rawEvent, inDirectory: path)
+		return event
+	}
+
+	/// The kernel reports `IN_IGNORED` once a watch is gone, whether it was
+	/// removed explicitly or because its item was deleted or unmounted.
+	/// Forgetting it keeps a reused descriptor number from mapping to a
+	/// stale path.
+	private func forgetWatchInCaseTheKernelRemovedIt(_ event: InotifyEvent) {
+		guard event.mask.contains(.ignored) else { return }
+		self.watches.remove(forId: event.watchDescriptor)
+	}
+
+	/// A directory moved out of a watched tree keeps its kernel watches,
+	/// which would then report events under the old path. Those watches
+	/// are removed instead.
+	private func removeWatchesInCaseADirectoryLeftTheTree(_ event: InotifyEvent) {
+		guard event.mask.contains(.movedFrom), event.mask.contains(.isDir) else { return }
+		for wd in self.watches.descriptors(under: event.path.string) {
+			inotify_rm_watch(self.fd, wd)
+			self.watches.remove(forId: wd)
+		}
 	}
 
 	private func addWatchInCaseOfAutomaticSubtreeWatching(_ event: InotifyEvent) async {

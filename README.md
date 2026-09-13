@@ -75,6 +75,8 @@ try await inotify.addWatchWithAutomaticSubtreeWatching(
 
 This is the most convenient option when you need full coverage of a growing directory tree.
 
+When a watched directory is moved out of the tree, the watches on it and on its subdirectories are removed, so no events are reported under the stale path.
+
 ## Excluding Items
 
 You can tell the `Inotify` actor to ignore certain file or directory names. Excluded names are skipped during recursive directory resolution (so no watch is installed on them) and silently dropped from the event stream:

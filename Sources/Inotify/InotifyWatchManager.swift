@@ -36,6 +36,14 @@ struct InotifyWatchManager {
 		return self.watchPaths[watchDescriptor]
 	}
 
+	/// The descriptors of the watch on `path` itself and of every watch below it.
+	func descriptors(under path: String) -> [CInt] {
+		let prefix = path.hasSuffix("/") ? path : path + "/"
+		return self.watchPaths
+			.filter { $0.value == path || $0.value.hasPrefix(prefix) }
+			.map(\.key)
+	}
+
 	func mask(forId watchDescriptor: CInt) -> InotifyEventMask? {
 		return self.watchMasks[watchDescriptor]
 	}

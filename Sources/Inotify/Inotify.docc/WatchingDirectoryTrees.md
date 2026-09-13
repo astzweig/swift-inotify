@@ -33,6 +33,8 @@ let descriptors = try await inotify.addWatchWithAutomaticSubtreeWatching(
 
 Internally this listens for `CREATE` events carrying the ``InotifyEventMask/isDir`` flag and installs a new watch with the same mask whenever a subdirectory appears.
 
+When a directory is moved out of the watched tree, the watches on it and on its subdirectories are removed, so no events are reported under the stale path.
+
 ### Excluding Directories
 
 When watching large trees you often want to skip certain subdirectories entirely — version-control metadata, build artefacts, dependency caches, and so on. Call ``Inotify/Inotify/exclude(names:)`` **before** adding a recursive or automatic-subtree watch:
