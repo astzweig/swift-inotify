@@ -5,7 +5,7 @@ public actor Inotify {
 	private let fd: CInt
 	private var excludedItemNames: Set<String> = []
 	private var watches = InotifyWatchManager()
-	private var eventReader: any DispatchSourceRead
+	private nonisolated(unsafe) let eventReader: any DispatchSourceRead
 	private nonisolated let eventStream: AsyncStream<RawInotifyEvent>
 	public nonisolated var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
 		self.eventStream.compactMap(self.transform(_:))
@@ -73,7 +73,11 @@ public actor Inotify {
 	}
 
 	deinit {
-		cinotify_deinit(self.fd)
+		// The file descriptor is closed by the reader's cancel handler once
+		// libdispatch has unregistered it. Closing it here would leave a
+		// registration behind that a later instance reusing the descriptor
+		// number could inherit, silently losing its events.
+		self.eventReader.cancel()
 	}
 
 	private func transform(_ rawEvent: RawInotifyEvent) async -> InotifyEvent? {
@@ -112,6 +116,7 @@ public actor Inotify {
 			}
 		}
 		reader.setCancelHandler {
+			cinotify_deinit(fd)
 			continuation.finish()
 		}
 		reader.activate()
