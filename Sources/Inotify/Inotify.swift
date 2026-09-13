@@ -93,6 +93,9 @@ public actor Inotify {
 	}
 
 	private func transform(_ rawEvent: RawInotifyEvent) async -> InotifyEvent? {
+		if rawEvent.mask.contains(.queueOverflow) {
+			return InotifyEvent(from: rawEvent, inDirectory: "")
+		}
 		guard let path = self.watches.path(forId: rawEvent.watchDescriptor) else { return nil }
 		guard !self.excludedItemNames.contains(rawEvent.name) else { return nil }
 		let event = InotifyEvent.init(from: rawEvent, inDirectory: path)

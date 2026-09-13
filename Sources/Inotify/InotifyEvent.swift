@@ -1,5 +1,12 @@
 import SystemPackage
 
+/// A filesystem event delivered by an ``Inotify`` instance.
+///
+/// When the kernel's event queue overflows, it drops events and reports a
+/// single event whose ``mask`` contains ``InotifyEventMask/queueOverflow``.
+/// Such an event belongs to no watch: its ``watchDescriptor`` is `-1` and
+/// its ``path`` is empty. Consumers that must not miss changes should
+/// rescan the watched trees when they receive one.
 public struct InotifyEvent: Sendable, Hashable, CustomStringConvertible {
 	public let watchDescriptor: Int32
 	public let mask: InotifyEventMask

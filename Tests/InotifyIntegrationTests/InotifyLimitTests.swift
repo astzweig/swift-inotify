@@ -40,4 +40,35 @@ struct InotifyLimitTests {
 			}
 		}
 	}
+
+	@Test func reportsQueueOverflowInsteadOfDroppingIt() async throws {
+		try await withTempDir { dir in
+			try await withInotifyWatchLimit(of: 1, for: [.queuedEvents]) {
+				let watcher = try Inotify()
+				try await watcher.addWatch(path: dir, mask: .allEvents)
+				let overflowTask = Task { () -> (InotifyEvent?, Int) in
+					var received = 0
+					for await event in await watcher.events {
+						received += 1
+						if event.mask.contains(.queueOverflow) { return (event, received) }
+					}
+					return (nil, received)
+				}
+
+				let deadline = ContinuousClock.now + .seconds(5)
+				var index = 0
+				while !overflowTask.isCancelled, ContinuousClock.now < deadline {
+					try createFile(at: "\(dir)/burst-\(index).txt", contents: "hello")
+					index += 1
+					if index % 200 == 0 { await Task.yield() }
+				}
+				overflowTask.cancel()
+				let (overflow, received) = await overflowTask.value
+
+				#expect(overflow != nil, "Expected a queue overflow event after \(index) file creations and \(received) received events")
+				#expect(overflow?.watchDescriptor == -1)
+				#expect(overflow?.path == "")
+			}
+		}
+	}
 }

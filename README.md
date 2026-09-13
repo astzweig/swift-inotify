@@ -118,6 +118,8 @@ Watch flags: `.dontFollow`, `.onlyDir`, `.oneShot`.
 
 Kernel-only flags returned in events: `.isDir`, `.ignored`, `.queueOverflow`, `.unmount`.
 
+When the kernel queue overflows, events are lost and a single event with `.queueOverflow` is delivered instead. It has no path and a watch descriptor of `-1`; rescan the watched directories if you must not miss changes.
+
 ## Removing a Watch
 
 Every `addWatch` variant returns one or more watch descriptors that you can use to remove the watch later:
