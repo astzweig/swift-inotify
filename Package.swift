@@ -8,7 +8,11 @@ let package = Package(
 		.library(
 			name: "Inotify",
 			targets: ["Inotify"]
-		)
+		),
+		.library(
+			name: "InotifyMask",
+			targets: ["InotifyMask"]
+		),
 	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
@@ -20,10 +24,12 @@ let package = Package(
 	],
 	targets: [
 		.systemLibrary(name: "CInotify"),
+		.target(name: "InotifyMask"),
 		.target(
 			name: "Inotify",
 			dependencies: [
 				"CInotify",
+				"InotifyMask",
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "_NIOFileSystem", package: "swift-nio"),
 				.product(name: "SystemPackage", package: "swift-system")

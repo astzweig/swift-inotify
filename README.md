@@ -101,6 +101,8 @@ Use `isExcluded(_:)` to check whether a name is currently on the exclusion list.
 
 `InotifyEventMask` is an `OptionSet` that mirrors the native inotify flags. You can combine them freely.
 
+The mask lives in the separate `InotifyMask` product, which has no Linux dependency. Depend on it alone where code only stores or compares masks and must build or be tested on other platforms; `Inotify` re-exports it.
+
 | Mask | Description |
 |------|-------------|
 | `.access` | File was read |
