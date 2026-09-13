@@ -11,12 +11,24 @@ public actor Inotify {
 		self.eventStream.compactMap(self.transform(_:))
 	}
 
-	public init() throws {
+	/// Creates an inotify instance.
+	///
+	/// Events are read from the kernel as soon as they arrive and buffered
+	/// until they are consumed from ``events``.
+	///
+	/// - Parameter bufferingPolicy: How events are kept while no consumer is
+	///   reading ``events``. The default `.unbounded` keeps every event, so a
+	///   burst of changes is never lost; a bounded policy trades memory for
+	///   dropped events.
+	public init(bufferingPolicy: AsyncStream<RawInotifyEvent>.Continuation.BufferingPolicy = .unbounded) throws {
 		self.fd = inotify_init1(CInt(IN_NONBLOCK | IN_CLOEXEC))
 		guard self.fd >= 0 else {
 			throw InotifyError.initFailed(errno: cinotify_get_errno())
 		}
-		(self.eventReader, self.eventStream) = Self.createEventReader(forFileDescriptor: fd)
+		(self.eventReader, self.eventStream) = Self.createEventReader(
+			forFileDescriptor: fd,
+			bufferingPolicy: bufferingPolicy
+		)
 	}
 
 	public func isExcluded(_ name: String) -> Bool {
@@ -99,10 +111,13 @@ public actor Inotify {
 		let _ = try? await self.addWatchWithAutomaticSubtreeWatching(forDirectory: event.path.string, mask: mask)
 	}
 
-	private static func createEventReader(forFileDescriptor fd: CInt) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>) {
+	private static func createEventReader(
+		forFileDescriptor fd: CInt,
+		bufferingPolicy: AsyncStream<RawInotifyEvent>.Continuation.BufferingPolicy
+	) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>) {
 		let (stream, continuation) = AsyncStream<RawInotifyEvent>.makeStream(
 			of: RawInotifyEvent.self,
-			bufferingPolicy: .bufferingNewest(512)
+			bufferingPolicy: bufferingPolicy
 		)
 
 		let reader = DispatchSource.makeReadSource(
