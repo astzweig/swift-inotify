@@ -1,5 +1,6 @@
 import Dispatch
 import CInotify
+import SystemPackage
 
 public actor Inotify {
 	private let fd: CInt
@@ -7,6 +8,7 @@ public actor Inotify {
 	private var watches = InotifyWatchManager()
 	private nonisolated(unsafe) let eventReader: any DispatchSourceRead
 	private nonisolated let eventStream: AsyncStream<RawInotifyEvent>
+	private nonisolated let continuation: AsyncStream<RawInotifyEvent>.Continuation
 	public nonisolated var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
 		self.eventStream.compactMap(self.transform(_:))
 	}
@@ -25,7 +27,7 @@ public actor Inotify {
 		guard self.fd >= 0 else {
 			throw InotifyError.initFailed(errno: cinotify_get_errno())
 		}
-		(self.eventReader, self.eventStream) = Self.createEventReader(
+		(self.eventReader, self.eventStream, self.continuation) = Self.createEventReader(
 			forFileDescriptor: fd,
 			bufferingPolicy: bufferingPolicy
 		)
@@ -126,20 +128,48 @@ public actor Inotify {
 	}
 
 	private func addWatchInCaseOfAutomaticSubtreeWatching(_ event: InotifyEvent) async {
-		guard watches.isAutomaticSubtreeWatching(event.watchDescriptor),
-			  event.mask.contains(.create),
-			  event.mask.contains(.isDir) else {
+		guard !event.synthesized,
+			  watches.isAutomaticSubtreeWatching(event.watchDescriptor),
+			  event.mask.contains(.isDir),
+			  let kind = Self.subtreeTrigger(in: event.mask) else {
 			return
 		}
 
 		guard let mask = self.watches.mask(forId: event.watchDescriptor) else { return }
-		let _ = try? await self.addWatchWithAutomaticSubtreeWatching(forDirectory: event.path.string, mask: mask)
+		guard let wds = try? await self.addWatchWithAutomaticSubtreeWatching(forDirectory: event.path.string, mask: mask) else { return }
+		await self.synthesizeEvents(forContentOfWatches: wds, kind: kind, cookie: event.cookie)
+	}
+
+	private static func subtreeTrigger(in mask: InotifyEventMask) -> InotifyEventMask? {
+		if mask.contains(.create) { return .create }
+		if mask.contains(.movedTo) { return .movedTo }
+		return nil
+	}
+
+	/// Items that already exist when a directory becomes watched never
+	/// produce kernel events, so they are reported as if they had just
+	/// appeared, marked as synthesized.
+	private func synthesizeEvents(forContentOfWatches wds: [CInt], kind: InotifyEventMask, cookie: UInt32) async {
+		for wd in wds {
+			guard let directory = self.watches.path(forId: wd) else { continue }
+			guard let entries = try? await DirectoryResolver.entries(of: FilePath(directory), excluding: self.excludedItemNames) else { continue }
+			for entry in entries {
+				let mask: InotifyEventMask = entry.isDirectory ? [kind, .isDir] : kind
+				self.continuation.yield(RawInotifyEvent(
+					watchDescriptor: wd,
+					mask: mask,
+					cookie: cookie,
+					name: entry.name,
+					synthesized: true
+				))
+			}
+		}
 	}
 
 	private static func createEventReader(
 		forFileDescriptor fd: CInt,
 		bufferingPolicy: AsyncStream<RawInotifyEvent>.Continuation.BufferingPolicy
-	) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>) {
+	) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>, AsyncStream<RawInotifyEvent>.Continuation) {
 		let (stream, continuation) = AsyncStream<RawInotifyEvent>.makeStream(
 			of: RawInotifyEvent.self,
 			bufferingPolicy: bufferingPolicy
@@ -161,6 +191,6 @@ public actor Inotify {
 		}
 		reader.activate()
 
-		return (reader, stream)
+		return (reader, stream, continuation)
 	}
 }

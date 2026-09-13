@@ -31,7 +31,7 @@ let descriptors = try await inotify.addWatchWithAutomaticSubtreeWatching(
 )
 ```
 
-Internally this listens for `CREATE` events carrying the ``InotifyEventMask/isDir`` flag and installs a new watch with the same mask whenever a subdirectory appears.
+Internally this listens for `CREATE` and `MOVED_TO` events carrying the ``InotifyEventMask/isDir`` flag and installs new watches with the same mask on the subdirectory and its subtree whenever one appears. Items that already exist inside such a subdirectory are reported with ``InotifyEvent/synthesized`` set to `true`, since the kernel never produces events for them; a synthesized event may duplicate a kernel event for the same item.
 
 When a directory is moved out of the watched tree, the watches on it and on its subdirectories are removed, so no events are reported under the stale path.
 

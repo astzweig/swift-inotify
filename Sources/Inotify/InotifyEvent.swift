@@ -12,6 +12,9 @@ public struct InotifyEvent: Sendable, Hashable, CustomStringConvertible {
 	public let mask: InotifyEventMask
 	public let cookie: UInt32
 	public let path: FilePath
+	/// Whether the event was produced by the library for an item that already
+	/// existed when its directory became watched, rather than by the kernel.
+	public let synthesized: Bool
 
 	public var description: String {
 		var parts = ["InotifyEvent(wd: \(watchDescriptor), mask: \(mask), path: \"\(path)\""]
@@ -27,7 +30,8 @@ extension InotifyEvent {
 			watchDescriptor: rawEvent.watchDescriptor,
 			mask: rawEvent.mask,
 			cookie: rawEvent.cookie,
-			path: dirPath.appending(rawEvent.name)
+			path: dirPath.appending(rawEvent.name),
+			synthesized: rawEvent.synthesized
 		)
 	}
 }

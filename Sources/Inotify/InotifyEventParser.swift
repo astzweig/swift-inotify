@@ -31,7 +31,8 @@ struct InotifyEventParser {
 				watchDescriptor: rawEvent.wd,
 				mask: InotifyEventMask(rawValue: rawEvent.mask),
 				cookie: rawEvent.cookie,
-				name: Self.extractName(from: eventPointer, nameLength: rawEvent.len)
+				name: Self.extractName(from: eventPointer, nameLength: rawEvent.len),
+				synthesized: false
 			))
 
 			offset += Self.eventSize(nameLength: rawEvent.len)

@@ -64,7 +64,7 @@ Subdirectories created after the call are **not** watched.
 
 ### Automatic Subtree Watching
 
-`addWatchWithAutomaticSubtreeWatching` does everything `addRecursiveWatch` does, and additionally listens for `CREATE` events with the `isDir` flag. Whenever a new subdirectory appears, a watch is installed on it automatically:
+`addWatchWithAutomaticSubtreeWatching` does everything `addRecursiveWatch` does, and additionally listens for `CREATE` and `MOVED_TO` events with the `isDir` flag. Whenever a subdirectory appears, whether created or moved in, a watch is installed on it and on its subdirectories automatically:
 
 ```swift
 try await inotify.addWatchWithAutomaticSubtreeWatching(
@@ -74,6 +74,8 @@ try await inotify.addWatchWithAutomaticSubtreeWatching(
 ```
 
 This is the most convenient option when you need full coverage of a growing directory tree.
+
+Items that already exist inside a directory that appears this way never produce kernel events. The library reports them as if they had just appeared, using the same kind of event (`CREATE` or `MOVED_TO`), with `synthesized` set to `true`. A synthesized event may duplicate a kernel event for the same item, so consumers that act on events should tolerate seeing an item twice.
 
 When a watched directory is moved out of the tree, the watches on it and on its subdirectories are removed, so no events are reported under the stale path.
 

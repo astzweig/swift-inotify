@@ -3,6 +3,9 @@ public struct RawInotifyEvent: Sendable, Hashable, CustomStringConvertible {
 	public let mask: InotifyEventMask
 	public let cookie: UInt32
 	public let name: String
+	/// Whether the event was produced by the library for an item that already
+	/// existed when its directory became watched, rather than by the kernel.
+	public let synthesized: Bool
 
 	public var description: String {
 		var parts = ["RawInotifyEvent(wd: \(watchDescriptor), mask: \(mask), name: \"\(name)\""]
