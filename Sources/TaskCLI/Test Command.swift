@@ -30,7 +30,7 @@ struct TestCommand: AsyncParsableCommand {
 				"--security-opt", "systempaths=unconfined",
 				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code", "swift:latest",
-				"/bin/bash", "-c", "swift test --skip InotifyLimitTests; swift test --skip-build --filter InotifyLimitTests"
+				"/bin/bash", "-c", "swift test --skip InotifyLimitTests && swift test --skip-build --filter InotifyLimitTests"
 			],
 			output: .currentStandardOutput,
 			error: .currentStandardError
