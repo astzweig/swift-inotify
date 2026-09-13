@@ -13,11 +13,7 @@ public struct DirectoryResolver {
 		for path in paths {
 			let path = FilePath(path)
 			resolved.append(path)
-			try await withSubdirectories(at: path, recursive: true) { subdirectoryPath in
-				guard let basename = subdirectoryPath.lastComponent?.description else { return }
-				guard !itemNames.contains(basename) else { return }
-				resolved.append(subdirectoryPath)
-			}
+			try await withSubdirectories(at: path, excluding: itemNames) { resolved.append($0) }
 		}
 
 		return resolved
@@ -36,14 +32,15 @@ public struct DirectoryResolver {
 		return entries
 	}
 
-	private static func withSubdirectories(at path: FilePath, recursive: Bool = false, body: (FilePath) async throws -> Void) async throws {
+	/// Calls `body` for every subdirectory below `path`, depth first. Excluded
+	/// names are neither reported nor descended into.
+	private static func withSubdirectories(at path: FilePath, excluding itemNames: Set<String>, body: (FilePath) async throws -> Void) async throws {
 		let directoryHandle = try await fileManager.openDirectory(atPath: path)
 		for try await childContent in directoryHandle.listContents() {
 			guard childContent.type == .directory else { continue }
+			guard let name = childContent.path.lastComponent?.string, !itemNames.contains(name) else { continue }
 			try await body(childContent.path)
-			if recursive {
-				try await withSubdirectories(at: childContent.path, recursive: recursive, body: body)
-			}
+			try await withSubdirectories(at: childContent.path, excluding: itemNames, body: body)
 		}
 		try await directoryHandle.close()
 	}
