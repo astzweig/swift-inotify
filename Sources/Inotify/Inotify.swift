@@ -4,7 +4,7 @@ import SystemPackage
 
 public actor Inotify {
 	private let fd: CInt
-	private var excludedItemNames: Set<String> = []
+	private var exclusions = ExclusionList()
 	private var watches = InotifyWatchManager()
 	private nonisolated(unsafe) let eventReader: any DispatchSourceRead
 	private nonisolated let eventStream: AsyncStream<RawInotifyEvent>
@@ -33,12 +33,14 @@ public actor Inotify {
 		)
 	}
 
+	/// Whether an item with this name is skipped, by an excluded name or
+	/// an excluded pattern.
 	public func isExcluded(_ name: String) -> Bool {
-		self.excludedItemNames.contains(name)
+		self.exclusions.excludes(name)
 	}
 
 	public func exclude(name: String) {
-		self.excludedItemNames.insert(name)
+		self.exclusions.add(name: name)
 	}
 
 	public func exclude(names: String...) {
@@ -47,7 +49,28 @@ public actor Inotify {
 
 	public func exclude(names: [String]) {
 		for name in names {
-			self.excludedItemNames.insert(name)
+			self.exclusions.add(name: name)
+		}
+	}
+
+	/// Excludes every item whose name matches a shell pattern such as
+	/// `*.tmp` or `@*`, with the same effect as an excluded name.
+	///
+	/// The pattern is matched against the item's own name, not its path,
+	/// as the shell matches file names: `*` and `?` stand for any
+	/// characters and `[…]` for a set of characters. A leading dot needs
+	/// no special treatment, so `.*` excludes hidden items.
+	public func exclude(pattern: String) {
+		self.exclusions.add(pattern: pattern)
+	}
+
+	public func exclude(patterns: String...) {
+		self.exclude(patterns: patterns)
+	}
+
+	public func exclude(patterns: [String]) {
+		for pattern in patterns {
+			self.exclusions.add(pattern: pattern)
 		}
 	}
 
@@ -63,7 +86,7 @@ public actor Inotify {
 
 	@discardableResult
 	public func addRecursiveWatch(forDirectory path: String, mask: InotifyEventMask) async throws -> [CInt] {
-		let directoryPaths = try await DirectoryResolver.resolve(path, excluding: self.excludedItemNames)
+		let directoryPaths = try await DirectoryResolver.resolve([path], excluding: self.exclusions)
 		var result: [CInt] = []
 		for path in directoryPaths {
 			let wd = try self.addWatch(path: path.string, mask: mask)
@@ -99,7 +122,7 @@ public actor Inotify {
 			return InotifyEvent(from: rawEvent, inDirectory: "")
 		}
 		guard let path = self.watches.path(forId: rawEvent.watchDescriptor) else { return nil }
-		guard !self.excludedItemNames.contains(rawEvent.name) else { return nil }
+		guard !self.exclusions.excludes(rawEvent.name) else { return nil }
 		let event = InotifyEvent.init(from: rawEvent, inDirectory: path)
 		self.forgetWatchInCaseTheKernelRemovedIt(event)
 		self.removeWatchesInCaseADirectoryLeftTheTree(event)
@@ -152,7 +175,7 @@ public actor Inotify {
 	private func synthesizeEvents(forContentOfWatches wds: [CInt], kind: InotifyEventMask, cookie: UInt32) async {
 		for wd in wds {
 			guard let directory = self.watches.path(forId: wd) else { continue }
-			guard let entries = try? await DirectoryResolver.entries(of: FilePath(directory), excluding: self.excludedItemNames) else { continue }
+			guard let entries = try? await DirectoryResolver.entries(of: FilePath(directory), excluding: self.exclusions) else { continue }
 			for entry in entries {
 				let mask: InotifyEventMask = entry.isDirectory ? [kind, .isDir] : kind
 				self.continuation.yield(RawInotifyEvent(

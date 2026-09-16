@@ -81,7 +81,7 @@ When a watched directory is moved out of the tree, the watches on it and on its 
 
 ## Excluding Items
 
-You can tell the `Inotify` actor to ignore certain file or directory names. Excluded names are skipped during recursive directory resolution (so no watch is installed on them) and silently dropped from the event stream:
+You can tell the `Inotify` actor to ignore certain file or directory names, either exactly or by a shell pattern. Excluded items are skipped during recursive directory resolution (so no watch is installed on them), never get a watch when they appear later, and are silently dropped from the event stream:
 
 ```swift
 let inotify = try Inotify()
@@ -89,13 +89,16 @@ let inotify = try Inotify()
 // Ignore version-control and build directories
 await inotify.exclude(names: ".git", "node_modules", ".build")
 
+// Ignore every hidden item and every metadata directory of a NAS
+await inotify.exclude(patterns: ".*", "@eaDir")
+
 try await inotify.addWatchWithAutomaticSubtreeWatching(
     forDirectory: "/home/user/project",
     mask: [.create, .modify, .delete]
 )
 ```
 
-Use `isExcluded(_:)` to check whether a name is currently on the exclusion list.
+A pattern is matched against an item's own name, not its path, the way the shell matches file names: `*` and `?` stand for any characters and `[…]` for a set of characters. Use `isExcluded(_:)` to check whether a name is currently excluded.
 
 ## Event Masks
 

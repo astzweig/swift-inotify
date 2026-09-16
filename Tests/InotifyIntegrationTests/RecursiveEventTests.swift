@@ -39,6 +39,44 @@ struct RecursiveEventTests {
 		}
 	}
 
+	@Test func ignoresFileCreationInASubfolderMatchingAnExcludedPattern() async throws {
+		try await withTempDir { dir in
+			let subDirectory = "\(dir)/@eaDir"
+			let filepath = "\(subDirectory)/modify-target.txt"
+			try FileManager.default.createDirectory(atPath: subDirectory, withIntermediateDirectories: true)
+
+			let events = try await getEventsForTrigger(
+				in: dir,
+				mask: [.create],
+				recursive: .recursive,
+				excludePatterns: ["@*"]
+			) { _ in try createFile(at: "\(filepath)", contents: "hello") }
+
+			let createEvent = events.first { $0.mask.contains(.create) && $0.path.string == filepath }
+			#expect(createEvent == nil, "Did not expect CREATE for '\(filepath)', got: \(events)")
+		}
+	}
+
+	@Test func doesNotWatchANewSubfolderMatchingAnExcludedPattern() async throws {
+		try await withTempDir { dir in
+			let subDirectory = "\(dir)/@eaDir"
+			let filepath = "\(subDirectory)/modify-target.txt"
+
+			let events = try await getEventsForTrigger(
+				in: dir,
+				mask: [.create],
+				recursive: .withAutomaticSubtreeWatching,
+				excludePatterns: ["@*"]
+			) { _ in
+				try FileManager.default.createDirectory(atPath: subDirectory, withIntermediateDirectories: true)
+				try await Task.sleep(for: .milliseconds(400))
+				try createFile(at: "\(filepath)", contents: "hello")
+			}
+
+			#expect(events.isEmpty, "Did not expect any event, got: \(events)")
+		}
+	}
+
 	@Test func newSubfoldersOfRecursiveWatchAreAutomaticallyWatchedToo() async throws {
 		try await withTempDir { dir in
 			let subDirectory = "\(dir)/Subfolder"

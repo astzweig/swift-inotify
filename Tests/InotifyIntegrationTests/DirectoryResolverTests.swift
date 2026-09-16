@@ -24,4 +24,14 @@ struct DirectoryResolverTests {
 			#expect(directories.map { $0.description } == [dir])
 		}
 	}
+
+	@Test func doesNotDescendIntoDirectoriesMatchingAnExcludedPattern() async throws {
+		try await withTempDir { dir in
+			let excludedSubdirectory = "\(dir)/@eaDir/Inside"
+			try FileManager.default.createDirectory(atPath: excludedSubdirectory, withIntermediateDirectories: true)
+			let directories = try await DirectoryResolver.resolve([dir], excluding: ExclusionList(patterns: ["@*"]))
+
+			#expect(directories.map { $0.description } == [dir])
+		}
+	}
 }

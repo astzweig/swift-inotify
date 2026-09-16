@@ -11,10 +11,12 @@ func getEventsForTrigger(
 	mask: InotifyEventMask,
 	recursive: RecursivKind = .nonrecursive,
 	exclude: [String] = [],
+	excludePatterns: [String] = [],
 	trigger: @escaping (String) async throws -> Void,
 ) async throws -> [InotifyEvent] {
 	let watcher = try Inotify()
 	await watcher.exclude(names: exclude)
+	await watcher.exclude(patterns: excludePatterns)
 	switch recursive {
 	case .nonrecursive:
 		try await watcher.addWatch(path: dir, mask: mask)

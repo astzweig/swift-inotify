@@ -37,11 +37,12 @@ When a directory is moved out of the watched tree, the watches on it and on its 
 
 ### Excluding Directories
 
-When watching large trees you often want to skip certain subdirectories entirely — version-control metadata, build artefacts, dependency caches, and so on. Call ``Inotify/Inotify/exclude(names:)`` **before** adding a recursive or automatic-subtree watch:
+When watching large trees you often want to skip certain subdirectories entirely — version-control metadata, build artefacts, dependency caches, and so on. Call ``Inotify/Inotify/exclude(names:)`` or ``Inotify/Inotify/exclude(patterns:)`` **before** adding a recursive or automatic-subtree watch:
 
 ```swift
 let inotify = try Inotify()
 await inotify.exclude(names: ".git", "node_modules", ".build")
+await inotify.exclude(patterns: ".*", "*.tmp")
 
 try await inotify.addWatchWithAutomaticSubtreeWatching(
     forDirectory: "/home/user/project",
@@ -49,7 +50,7 @@ try await inotify.addWatchWithAutomaticSubtreeWatching(
 )
 ```
 
-Excluded names are matched against the last path component of each directory during resolution and are also filtered from the event stream, so you never receive events for items whose name is on the exclusion list.
+Excluded names and patterns are matched against the last path component of each directory during resolution, against a directory that appears later before a watch is extended to it, and against every event, so you never receive events for excluded items. A pattern is matched the way the shell matches file names: `*` and `?` stand for any characters and `[…]` for a set of characters; a leading dot needs no special treatment.
 
 ### Choosing the Right Method
 
