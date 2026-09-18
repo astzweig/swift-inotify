@@ -6,7 +6,29 @@ enum RecursivKind {
 	case withAutomaticSubtreeWatching
 }
 
+/// The file system events an instance delivers around `trigger`.
 func getEventsForTrigger(
+	in dir: String,
+	mask: InotifyEventMask,
+	recursive: RecursivKind = .nonrecursive,
+	exclude: [String] = [],
+	excludePatterns: [String] = [],
+	trigger: @escaping (String) async throws -> Void,
+) async throws -> [FileSystemEvent] {
+	let events = try await getInotifyEventsForTrigger(
+		in: dir,
+		mask: mask,
+		recursive: recursive,
+		exclude: exclude,
+		excludePatterns: excludePatterns,
+		trigger: trigger
+	)
+	return events.compactMap(\.fileSystemEvent)
+}
+
+/// Everything an instance delivers around `trigger`, including the
+/// events that are not about a file system item.
+func getInotifyEventsForTrigger(
 	in dir: String,
 	mask: InotifyEventMask,
 	recursive: RecursivKind = .nonrecursive,
@@ -40,4 +62,11 @@ func getEventsForTrigger(
 
 	eventTask.cancel()
 	return await eventTask.value
+}
+
+extension InotifyEvent {
+	var fileSystemEvent: FileSystemEvent? {
+		if case .fileSystem(let event) = self { return event }
+		return nil
+	}
 }

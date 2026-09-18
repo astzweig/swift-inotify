@@ -119,22 +119,22 @@ public actor Inotify {
 
 	private func transform(_ rawEvent: RawInotifyEvent) async -> InotifyEvent? {
 		if rawEvent.mask.contains(.queueOverflow) {
-			return InotifyEvent(from: rawEvent, inDirectory: "")
+			return .queueOverflow
 		}
 		guard let path = self.watches.path(forId: rawEvent.watchDescriptor) else { return nil }
 		guard !self.exclusions.excludes(rawEvent.name) else { return nil }
-		let event = InotifyEvent.init(from: rawEvent, inDirectory: path)
+		let event = FileSystemEvent(from: rawEvent, inDirectory: path)
 		self.forgetWatchInCaseTheKernelRemovedIt(event)
 		self.removeWatchesInCaseADirectoryLeftTheTree(event)
 		await self.addWatchInCaseOfAutomaticSubtreeWatching(event)
-		return event
+		return .fileSystem(event)
 	}
 
 	/// The kernel reports `IN_IGNORED` once a watch is gone, whether it was
 	/// removed explicitly or because its item was deleted or unmounted.
 	/// Forgetting it keeps a reused descriptor number from mapping to a
 	/// stale path.
-	private func forgetWatchInCaseTheKernelRemovedIt(_ event: InotifyEvent) {
+	private func forgetWatchInCaseTheKernelRemovedIt(_ event: FileSystemEvent) {
 		guard event.mask.contains(.ignored) else { return }
 		self.watches.remove(forId: event.watchDescriptor)
 	}
@@ -142,7 +142,7 @@ public actor Inotify {
 	/// A directory moved out of a watched tree keeps its kernel watches,
 	/// which would then report events under the old path. Those watches
 	/// are removed instead.
-	private func removeWatchesInCaseADirectoryLeftTheTree(_ event: InotifyEvent) {
+	private func removeWatchesInCaseADirectoryLeftTheTree(_ event: FileSystemEvent) {
 		guard event.mask.contains(.movedFrom), event.mask.contains(.isDir) else { return }
 		for wd in self.watches.descriptors(under: event.path.string) {
 			inotify_rm_watch(self.fd, wd)
@@ -150,7 +150,7 @@ public actor Inotify {
 		}
 	}
 
-	private func addWatchInCaseOfAutomaticSubtreeWatching(_ event: InotifyEvent) async {
+	private func addWatchInCaseOfAutomaticSubtreeWatching(_ event: FileSystemEvent) async {
 		guard !event.synthesized,
 			  watches.isAutomaticSubtreeWatching(event.watchDescriptor),
 			  event.mask.contains(.isDir),

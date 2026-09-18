@@ -50,7 +50,7 @@ struct InotifyLimitTests {
 					var received = 0
 					for await event in await watcher.events {
 						received += 1
-						if event.mask.contains(.queueOverflow) { return (event, received) }
+						if case .queueOverflow = event { return (event, received) }
 					}
 					return (nil, received)
 				}
@@ -65,9 +65,7 @@ struct InotifyLimitTests {
 				overflowTask.cancel()
 				let (overflow, received) = await overflowTask.value
 
-				#expect(overflow != nil, "Expected a queue overflow event after \(index) file creations and \(received) received events")
-				#expect(overflow?.watchDescriptor == -1)
-				#expect(overflow?.path == "")
+				#expect(overflow == .queueOverflow, "Expected a queue overflow event after \(index) file creations and \(received) received events")
 			}
 		}
 	}

@@ -4,14 +4,19 @@ Monitor filesystem events on Linux using modern Swift concurrency.
 
 ## Overview
 
-The Inotify library wraps the Linux [inotify](https://man7.org/linux/man-pages/man7/inotify.7.html) API in a Swift-native interface built around actors and async sequences. You create an ``Inotify/Inotify`` actor, add watches for the paths you care about, and iterate over the ``Inotify/Inotify/events`` property to receive ``InotifyEvent`` values as they occur.
+The Inotify library wraps the Linux [inotify](https://man7.org/linux/man-pages/man7/inotify.7.html) API in a Swift-native interface built around actors and async sequences. You create an ``Inotify/Inotify`` actor, add watches for the paths you care about, and iterate over the ``Inotify/Inotify/events`` property to receive ``InotifyEvent`` values as they occur. Most of them carry a ``FileSystemEvent`` describing a change to a watched item; the others tell you when the instance cannot deliver every change, such as after a kernel queue overflow.
 
 ```swift
 let inotify = try Inotify()
 try inotify.addWatch(path: "/tmp/inbox", mask: [.create, .modify])
 
 for await event in await inotify.events {
-    print("\(event.mask) at \(event.path)")
+    switch event {
+    case .fileSystem(let change):
+        print("\(change.mask) at \(change.path)")
+    case .queueOverflow:
+        print("events were dropped, rescan")
+    }
 }
 ```
 
@@ -30,6 +35,7 @@ All public types conform to `Sendable`, so they can be safely passed across conc
 
 - ``Inotify/Inotify``
 - ``InotifyEvent``
+- ``FileSystemEvent``
 - ``InotifyEventMask``
 
 ### Articles

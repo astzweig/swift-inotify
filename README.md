@@ -41,7 +41,12 @@ try inotify.addWatch(path: "/tmp/watched", mask: [.create, .modify])
 
 // Consume events as they arrive
 for await event in await inotify.events {
-    print("Event at \(event.path): \(event.mask)")
+    switch event {
+    case .fileSystem(let change):
+        print("Event at \(change.path): \(change.mask)")
+    case .queueOverflow:
+        print("The kernel dropped events; rescan if you must not miss changes.")
+    }
 }
 ```
 
@@ -125,9 +130,9 @@ Convenience combinations: `.move` (`.movedFrom` + `.movedTo`), `.close` (`.close
 
 Watch flags: `.dontFollow`, `.onlyDir`, `.oneShot`.
 
-Kernel-only flags returned in events: `.isDir`, `.ignored`, `.queueOverflow`, `.unmount`.
+Kernel-only flags returned in events: `.isDir`, `.ignored`, `.unmount`.
 
-When the kernel queue overflows, events are lost and a single event with `.queueOverflow` is delivered instead. It has no path and a watch descriptor of `-1`; rescan the watched directories if you must not miss changes.
+When the kernel queue overflows, events are lost and `InotifyEvent.queueOverflow` is delivered instead of a file system event; rescan the watched directories if you must not miss changes.
 
 ## Removing a Watch
 
