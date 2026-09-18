@@ -18,7 +18,7 @@ let descriptors = try await inotify.addRecursiveWatch(
 )
 ```
 
-The returned array contains one watch descriptor per directory. Subdirectories created **after** this call are not covered.
+The returned array contains one watch descriptor per directory. Subdirectories created **after** this call are not covered. When one of the directories cannot be watched, for instance because the user's watch limit is reached, the call throws and removes the watches it had added, so the instance is left as it was.
 
 ### Automatic Subtree Watching
 

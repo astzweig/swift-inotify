@@ -18,6 +18,31 @@ struct InotifyLimitTests {
 		}
 	}
 
+	/// The limit counts every watch of the user, also those of other
+	/// processes, so it leaves room for the one watch of the second instance.
+	@Test func releasesTheWatchesOfATreeItCouldNotWatchCompletely() async throws {
+		try await withTempDir { dir in
+			try await withInotifyWatchLimit(of: 100, for: [.userWatches]) {
+				try createSubdirectorytree(at: dir, foldersPerLevel: 4, levels: 4)
+				let filepath = "\(dir)/new-file.txt"
+				let failedWatcher = try Inotify()
+				await #expect(throws: InotifyError.self) {
+					try await failedWatcher.addRecursiveWatch(forDirectory: dir, mask: .create)
+				}
+
+				let events = try await getEventsForTrigger(in: dir, mask: .create) { _ in
+					try createFile(at: filepath, contents: "hello")
+				}
+				// Deallocating the failed instance would free its watches too, so it
+				// must live until the second instance has added its watch.
+				withExtendedLifetime(failedWatcher) {}
+
+				let createEvent = events.first { $0.path.string == filepath }
+				#expect(createEvent != nil, "Expected a second instance to watch '\(dir)' after the failed one released its watches, got: \(events)")
+			}
+		}
+	}
+
 	@Test func watchesMassivSubtreesIfAllowed() async throws {
 		try await withTempDir { dir in
 			try await withInotifyWatchLimit(of: 1000) {

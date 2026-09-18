@@ -84,13 +84,19 @@ public actor Inotify {
 		return wd
 	}
 
+	/// Watches `path` and every directory below it, or throws and leaves no
+	/// watch behind when one of them cannot be watched.
 	@discardableResult
 	public func addRecursiveWatch(forDirectory path: String, mask: InotifyEventMask) async throws -> [CInt] {
 		let directoryPaths = try await DirectoryResolver.resolve([path], excluding: self.exclusions)
 		var result: [CInt] = []
-		for path in directoryPaths {
-			let wd = try self.addWatch(path: path.string, mask: mask)
-			result.append(wd)
+		do {
+			for path in directoryPaths {
+				result.append(try self.addWatch(path: path.string, mask: mask))
+			}
+		} catch {
+			self.dropWatches(result)
+			throw error
 		}
 		return result
 	}
@@ -144,7 +150,13 @@ public actor Inotify {
 	/// are removed instead.
 	private func removeWatchesInCaseADirectoryLeftTheTree(_ event: FileSystemEvent) {
 		guard event.mask.contains(.movedFrom), event.mask.contains(.isDir) else { return }
-		for wd in self.watches.descriptors(under: event.path.string) {
+		self.dropWatches(self.watches.descriptors(under: event.path.string))
+	}
+
+	/// Removes watches whose failure does not matter, because their item is
+	/// gone or the watches are given up anyway.
+	private func dropWatches(_ wds: [CInt]) {
+		for wd in wds {
 			inotify_rm_watch(self.fd, wd)
 			self.watches.remove(forId: wd)
 		}
