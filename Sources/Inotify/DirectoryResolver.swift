@@ -1,3 +1,4 @@
+import CInotify
 import _NIOFileSystem
 
 public struct DirectoryResolver {
@@ -17,6 +18,45 @@ public struct DirectoryResolver {
 		}
 
 		return resolved
+	}
+
+	/// Resolves `path` like ``resolve(_:excluding:)``, but a directory that
+	/// cannot be listed is recorded with its errno and skipped together with
+	/// its subtree, instead of failing the whole resolution.
+	static func resolveTolerantly(_ path: FilePath, excluding exclusions: ExclusionList) async -> TolerantResolution {
+		var resolution = TolerantResolution()
+		await collectDirectories(at: path, excluding: exclusions, into: &resolution)
+		return resolution
+	}
+
+	private static func collectDirectories(at path: FilePath, excluding exclusions: ExclusionList, into resolution: inout TolerantResolution) async {
+		let subdirectories: [FilePath]
+		do {
+			subdirectories = try await entries(of: path, excluding: exclusions)
+				.filter(\.isDirectory)
+				.map { path.appending($0.name) }
+		} catch {
+			resolution.unreadable.append((path: path, errno: errno(of: error)))
+			return
+		}
+		resolution.directories.append(path)
+		for subdirectory in subdirectories {
+			await collectDirectories(at: subdirectory, excluding: exclusions, into: &resolution)
+		}
+	}
+
+	/// The errno behind a file system error; the error's code when the
+	/// system call is unknown.
+	private static func errno(of error: any Error) -> Int32 {
+		guard let fileSystemError = error as? FileSystemError else { return EIO }
+		if let systemCall = fileSystemError.cause as? FileSystemError.SystemCallError {
+			return systemCall.errno.rawValue
+		}
+		return switch fileSystemError.code {
+		case .permissionDenied: EACCES
+		case .notFound: ENOENT
+		default: EIO
+		}
 	}
 
 	/// The direct children of `directory`, without the excluded items.
@@ -44,4 +84,10 @@ public struct DirectoryResolver {
 		}
 		try await directoryHandle.close()
 	}
+}
+
+struct TolerantResolution {
+	/// The directories that could be listed, each before its subdirectories.
+	var directories: [FilePath] = []
+	var unreadable: [(path: FilePath, errno: Int32)] = []
 }

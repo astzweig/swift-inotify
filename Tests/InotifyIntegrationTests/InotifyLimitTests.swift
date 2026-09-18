@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SystemPackage
 @testable import Inotify
 
 @Suite("Inotify Limits", .serialized)
@@ -62,6 +63,28 @@ struct InotifyLimitTests {
 
 				let createEvent = events.first { $0.mask.contains(.create) && $0.path.string == filepath }
 				#expect(createEvent != nil, "Expected CREATE for '\(filepath)', got: \(events)")
+			}
+		}
+	}
+
+	/// The tree that grows is larger than the limit, so the extension fails
+	/// part way; the watches that exist keep working.
+	@Test func reportsTheDirectoriesItCannotWatchWhenATreeGrows() async throws {
+		try await withTempDir { dir in
+			try await withInotifyWatchLimit(of: 100, for: [.userWatches]) {
+				let grown = "\(dir)/Grown"
+				let filepath = "\(dir)/after-failure.txt"
+				let watcher = try Inotify()
+				try await watcher.addWatchWithAutomaticSubtreeWatching(forDirectory: dir, mask: [.create])
+				try createSubdirectorytree(at: grown, foldersPerLevel: 3, levels: 4)
+				let untilFailure = await collectEvents(of: watcher, until: { $0.watchFailure != nil }, timeout: .seconds(5))
+				try createFile(at: filepath, contents: "hello")
+				let afterFailure = await collectEvents(of: watcher, until: { $0.fileSystemEvent?.path.string == filepath }, timeout: .seconds(5))
+
+				let failure = untilFailure.last?.watchFailure
+				#expect(failure?.error == .addWatchFailed(path: failure?.path.string ?? "", errno: ENOSPC), "Expected a watch failure with ENOSPC, got: \(untilFailure.suffix(3))")
+				#expect(failure?.path.starts(with: FilePath(grown)) == true, "Expected the failed directory below '\(grown)', got: \(String(describing: failure))")
+				#expect(afterFailure.last?.fileSystemEvent?.path.string == filepath, "Expected CREATE for '\(filepath)' after the failure, got: \(afterFailure.suffix(3))")
 			}
 		}
 	}

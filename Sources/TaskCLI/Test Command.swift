@@ -28,6 +28,9 @@ struct TestCommand: AsyncParsableCommand {
 				"-v", "\(currentDirectory):/code",
 				"-v", "swift-inotify-build-cache:/code/.build",
 				"--security-opt", "systempaths=unconfined",
+				// Root ignores directory permissions unless these are dropped; a
+				// test relies on an unreadable directory.
+				"--cap-drop", "DAC_OVERRIDE", "--cap-drop", "DAC_READ_SEARCH",
 				"--platform", Docker.getLinuxPlatformStringWithHostArchitecture(),
 				"-w", "/code", "swift:latest",
 				"/bin/bash", "-c", "swift test --skip InotifyLimitTests && swift test --skip-build --filter InotifyLimitTests"

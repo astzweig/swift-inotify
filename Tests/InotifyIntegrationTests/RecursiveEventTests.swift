@@ -1,4 +1,5 @@
 import Foundation
+import SystemPackage
 import Testing
 @testable import Inotify
 
@@ -156,6 +157,59 @@ struct RecursiveEventTests {
 
 			let createdAfterMove = events.first { !$0.synthesized && $0.mask.contains(.create) && $0.path.string == "\(treeDestination)/Sub/created-after-move.txt" }
 			#expect(createdAfterMove != nil, "Expected CREATE inside the moved-in subdirectory, got: \(events)")
+		}
+	}
+
+	/// Needs a process that directory permissions apply to; the test runner
+	/// drops root's override capabilities for that.
+	@Test func reportsANewDirectoryItCannotReadAndWatchesItsSiblings() async throws {
+		try await withTempDir { dir in
+			let root = "\(dir)/Root"
+			let treeSource = "\(dir)/Outside/Grown"
+			let treeDestination = "\(root)/Grown"
+			let locked = "\(treeDestination)/Locked"
+			let filepath = "\(treeDestination)/Open/created.txt"
+			try FileManager.default.createDirectory(atPath: "\(treeSource)/Locked", withIntermediateDirectories: true)
+			try FileManager.default.createDirectory(atPath: "\(treeSource)/Open", withIntermediateDirectories: true)
+			try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+			try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: "\(treeSource)/Locked")
+			defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked) }
+
+			let events = try await getInotifyEventsForTrigger(
+				in: root,
+				mask: [.create, .movedTo],
+				recursive: .withAutomaticSubtreeWatching
+			) { _ in
+				try FileManager.default.moveItem(atPath: treeSource, toPath: treeDestination)
+				try await Task.sleep(for: .milliseconds(400))
+				try createFile(at: filepath, contents: "hello")
+			}
+
+			let failures = events.compactMap(\.watchFailure)
+			#expect(failures.count == 1, "Expected exactly the locked directory to be reported, got: \(events)")
+			#expect(failures.first?.path == FilePath(locked))
+			#expect(failures.first?.error == .listDirectoryFailed(path: locked, errno: EACCES))
+			let sibling = events.compactMap(\.fileSystemEvent).first { !$0.synthesized && $0.mask.contains(.create) && $0.path.string == filepath }
+			#expect(sibling != nil, "Expected CREATE inside the readable sibling, got: \(events)")
+		}
+	}
+
+	/// Events are transformed as they are consumed, so a directory that is
+	/// created and removed before consumption starts is gone when the
+	/// library tries to watch it.
+	@Test func doesNotReportADirectoryThatVanishedBeforeItCouldBeWatched() async throws {
+		try await withTempDir { dir in
+			let vanished = "\(dir)/Vanished"
+			let watcher = try Inotify()
+			try await watcher.addWatchWithAutomaticSubtreeWatching(forDirectory: dir, mask: [.create])
+			try FileManager.default.createDirectory(atPath: vanished, withIntermediateDirectories: false)
+			try FileManager.default.removeItem(atPath: vanished)
+
+			let events = await collectEvents(of: watcher, for: .milliseconds(500))
+
+			#expect(events.compactMap(\.watchFailure).isEmpty, "Did not expect a watch failure for a vanished directory, got: \(events)")
+			let created = events.compactMap(\.fileSystemEvent).first { $0.mask.contains(.create) && $0.path.string == vanished }
+			#expect(created != nil, "Expected CREATE for '\(vanished)', got: \(events)")
 		}
 	}
 }

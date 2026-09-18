@@ -46,6 +46,8 @@ for await event in await inotify.events {
         print("Event at \(change.path): \(change.mask)")
     case .queueOverflow:
         print("The kernel dropped events; rescan if you must not miss changes.")
+    case .watchFailed(let path, let error):
+        print("Changes below \(path) go unreported: \(error)")
     }
 }
 ```
@@ -83,6 +85,8 @@ This is the most convenient option when you need full coverage of a growing dire
 Items that already exist inside a directory that appears this way never produce kernel events. The library reports them as if they had just appeared, using the same kind of event (`CREATE` or `MOVED_TO`), with `synthesized` set to `true`. A synthesized event may duplicate a kernel event for the same item, so consumers that act on events should tolerate seeing an item twice.
 
 When a watched directory is moved out of the tree, the watches on it and on its subdirectories are removed, so no events are reported under the stale path.
+
+Extending the watch to a new directory can fail, typically because the user's watch limit (`fs.inotify.max_user_watches`) is reached or the directory is not readable. The library then watches what it can and delivers `InotifyEvent.watchFailed(path:error:)` for each directory it could not watch, so changes below that path are known to go unreported. A directory that vanished before it could be watched is not reported. The explicit `addRecursiveWatch` and `addWatchWithAutomaticSubtreeWatching` calls, by contrast, either watch the whole tree or throw and leave no watch behind.
 
 ## Excluding Items
 

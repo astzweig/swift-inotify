@@ -7,9 +7,9 @@ public actor Inotify {
 	private var exclusions = ExclusionList()
 	private var watches = InotifyWatchManager()
 	private nonisolated(unsafe) let eventReader: any DispatchSourceRead
-	private nonisolated let eventStream: AsyncStream<RawInotifyEvent>
-	private nonisolated let continuation: AsyncStream<RawInotifyEvent>.Continuation
-	public nonisolated var events: AsyncCompactMapSequence<AsyncStream<RawInotifyEvent>, InotifyEvent> {
+	private nonisolated let eventStream: AsyncStream<BufferedEvent>
+	private nonisolated let continuation: AsyncStream<BufferedEvent>.Continuation
+	public nonisolated var events: some AsyncSequence<InotifyEvent, Never> {
 		self.eventStream.compactMap(self.transform(_:))
 	}
 
@@ -22,14 +22,14 @@ public actor Inotify {
 	///   reading ``events``. The default `.unbounded` keeps every event, so a
 	///   burst of changes is never lost; a bounded policy trades memory for
 	///   dropped events.
-	public init(bufferingPolicy: AsyncStream<RawInotifyEvent>.Continuation.BufferingPolicy = .unbounded) throws {
+	public init(bufferingPolicy: AsyncStream<InotifyEvent>.Continuation.BufferingPolicy = .unbounded) throws {
 		self.fd = inotify_init1(CInt(IN_NONBLOCK | IN_CLOEXEC))
 		guard self.fd >= 0 else {
 			throw InotifyError.initFailed(errno: cinotify_get_errno())
 		}
 		(self.eventReader, self.eventStream, self.continuation) = Self.createEventReader(
 			forFileDescriptor: fd,
-			bufferingPolicy: bufferingPolicy
+			bufferingPolicy: Self.bufferedPolicy(for: bufferingPolicy)
 		)
 	}
 
@@ -75,7 +75,7 @@ public actor Inotify {
 	}
 
 	@discardableResult
-	public func addWatch(path: String, mask: InotifyEventMask) throws -> CInt {
+	public func addWatch(path: String, mask: InotifyEventMask) throws(InotifyError) -> CInt {
 		let wd = inotify_add_watch(self.fd, path, mask.rawValue)
 		guard wd >= 0 else {
 			throw InotifyError.addWatchFailed(path: path, errno: cinotify_get_errno())
@@ -108,7 +108,7 @@ public actor Inotify {
 		return wds
 	}
 
-	public func removeWatch(_ wd: CInt) throws {
+	public func removeWatch(_ wd: CInt) throws(InotifyError) {
 		guard inotify_rm_watch(self.fd, wd) == 0 else {
 			throw InotifyError.removeWatchFailed(watchDescriptor: wd, errno: cinotify_get_errno())
 		}
@@ -121,6 +121,13 @@ public actor Inotify {
 		// registration behind that a later instance reusing the descriptor
 		// number could inherit, silently losing its events.
 		self.eventReader.cancel()
+	}
+
+	private func transform(_ buffered: BufferedEvent) async -> InotifyEvent? {
+		switch buffered {
+		case .event(let event): event
+		case .raw(let rawEvent): await transform(rawEvent)
+		}
 	}
 
 	private func transform(_ rawEvent: RawInotifyEvent) async -> InotifyEvent? {
@@ -166,13 +173,42 @@ public actor Inotify {
 		guard !event.synthesized,
 			  watches.isAutomaticSubtreeWatching(event.watchDescriptor),
 			  event.mask.contains(.isDir),
-			  let kind = Self.subtreeTrigger(in: event.mask) else {
+			  let kind = Self.subtreeTrigger(in: event.mask),
+			  let mask = self.watches.mask(forId: event.watchDescriptor) else {
 			return
 		}
 
-		guard let mask = self.watches.mask(forId: event.watchDescriptor) else { return }
-		guard let wds = try? await self.addWatchWithAutomaticSubtreeWatching(forDirectory: event.path.string, mask: mask) else { return }
+		let wds = await self.extendWatches(to: event.path, mask: mask)
+		watches.enableAutomaticSubtreeWatching(forIds: wds)
 		await self.synthesizeEvents(forContentOfWatches: wds, kind: kind, cookie: event.cookie)
+	}
+
+	/// Watches what it can of the tree at `path` and reports the rest as
+	/// ``InotifyEvent/watchFailed(path:error:)``. No consumer can catch an
+	/// error here, so the events are the only way to tell them.
+	private func extendWatches(to path: FilePath, mask: InotifyEventMask) async -> [CInt] {
+		let resolution = await DirectoryResolver.resolveTolerantly(path, excluding: self.exclusions)
+		for (unreadable, errno) in resolution.unreadable where errno != ENOENT {
+			self.report(.listDirectoryFailed(path: unreadable.string, errno: errno), for: unreadable)
+		}
+		var wds: [CInt] = []
+		for directory in resolution.directories {
+			do {
+				wds.append(try self.addWatch(path: directory.string, mask: mask))
+			} catch .addWatchFailed(_, let errno) where errno == ENOENT {
+				continue
+			} catch .addWatchFailed(_, let errno) where errno == ENOSPC {
+				self.report(.addWatchFailed(path: directory.string, errno: errno), for: directory)
+				break
+			} catch {
+				self.report(error, for: directory)
+			}
+		}
+		return wds
+	}
+
+	private func report(_ error: InotifyError, for directory: FilePath) {
+		self.continuation.yield(.event(.watchFailed(path: directory, error: error)))
 	}
 
 	private static func subtreeTrigger(in mask: InotifyEventMask) -> InotifyEventMask? {
@@ -190,23 +226,36 @@ public actor Inotify {
 			guard let entries = try? await DirectoryResolver.entries(of: FilePath(directory), excluding: self.exclusions) else { continue }
 			for entry in entries {
 				let mask: InotifyEventMask = entry.isDirectory ? [kind, .isDir] : kind
-				self.continuation.yield(RawInotifyEvent(
+				self.continuation.yield(.raw(RawInotifyEvent(
 					watchDescriptor: wd,
 					mask: mask,
 					cookie: cookie,
 					name: entry.name,
 					synthesized: true
-				))
+				)))
 			}
+		}
+	}
+
+	/// The buffer holds the library's own events next to the kernel's, so
+	/// the policy is translated for its element type.
+	private static func bufferedPolicy(
+		for policy: AsyncStream<InotifyEvent>.Continuation.BufferingPolicy
+	) -> AsyncStream<BufferedEvent>.Continuation.BufferingPolicy {
+		switch policy {
+		case .unbounded: .unbounded
+		case .bufferingOldest(let count): .bufferingOldest(count)
+		case .bufferingNewest(let count): .bufferingNewest(count)
+		@unknown default: .unbounded
 		}
 	}
 
 	private static func createEventReader(
 		forFileDescriptor fd: CInt,
-		bufferingPolicy: AsyncStream<RawInotifyEvent>.Continuation.BufferingPolicy
-	) -> (any DispatchSourceRead, AsyncStream<RawInotifyEvent>, AsyncStream<RawInotifyEvent>.Continuation) {
-		let (stream, continuation) = AsyncStream<RawInotifyEvent>.makeStream(
-			of: RawInotifyEvent.self,
+		bufferingPolicy: AsyncStream<BufferedEvent>.Continuation.BufferingPolicy
+	) -> (any DispatchSourceRead, AsyncStream<BufferedEvent>, AsyncStream<BufferedEvent>.Continuation) {
+		let (stream, continuation) = AsyncStream<BufferedEvent>.makeStream(
+			of: BufferedEvent.self,
 			bufferingPolicy: bufferingPolicy
 		)
 
@@ -217,7 +266,7 @@ public actor Inotify {
 
 		reader.setEventHandler {
 			for rawEvent in InotifyEventParser.parse(fromFileDescriptor: fd) {
-				continuation.yield(rawEvent)
+				continuation.yield(.raw(rawEvent))
 			}
 		}
 		reader.setCancelHandler {
@@ -227,5 +276,12 @@ public actor Inotify {
 		reader.activate()
 
 		return (reader, stream, continuation)
+	}
+
+	/// What waits in the buffer: a kernel event, transformed when it is
+	/// consumed, or an event the library produced itself.
+	enum BufferedEvent: Sendable {
+		case raw(RawInotifyEvent)
+		case event(InotifyEvent)
 	}
 }

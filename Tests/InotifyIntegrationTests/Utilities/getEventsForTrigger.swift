@@ -1,4 +1,5 @@
 import Inotify
+import SystemPackage
 
 enum RecursivKind {
 	case nonrecursive
@@ -48,13 +49,7 @@ func getInotifyEventsForTrigger(
 		try await watcher.addWatchWithAutomaticSubtreeWatching(forDirectory: dir, mask: mask)
 	}
 
-	let eventTask = Task {
-		var events: [InotifyEvent] = []
-		for await event in await watcher.events {
-			events.append(event)
-		}
-		return events
-	}
+	let eventTask = Task { await collectEvents(of: watcher) }
 
 	try await Task.sleep(for: .milliseconds(100))
 	try await trigger(dir)
@@ -64,9 +59,54 @@ func getInotifyEventsForTrigger(
 	return await eventTask.value
 }
 
+/// Everything `watcher` delivers until the current task is cancelled.
+func collectEvents(of watcher: Inotify) async -> [InotifyEvent] {
+	var events: [InotifyEvent] = []
+	for await event in await watcher.events {
+		events.append(event)
+	}
+	return events
+}
+
+/// Everything `watcher` delivers up to and including the first event that
+/// satisfies `predicate`, or until `timeout` passes.
+func collectEvents(
+	of watcher: Inotify,
+	until predicate: @escaping @Sendable (InotifyEvent) -> Bool,
+	timeout: Duration
+) async -> [InotifyEvent] {
+	let eventTask = Task { () -> [InotifyEvent] in
+		var events: [InotifyEvent] = []
+		for await event in await watcher.events {
+			events.append(event)
+			if predicate(event) { break }
+		}
+		return events
+	}
+	let timeoutTask = Task {
+		try? await Task.sleep(for: timeout)
+		eventTask.cancel()
+	}
+	defer { timeoutTask.cancel() }
+	return await eventTask.value
+}
+
+/// Everything `watcher` delivers within `duration`.
+func collectEvents(of watcher: Inotify, for duration: Duration) async -> [InotifyEvent] {
+	let eventTask = Task { await collectEvents(of: watcher) }
+	try? await Task.sleep(for: duration)
+	eventTask.cancel()
+	return await eventTask.value
+}
+
 extension InotifyEvent {
 	var fileSystemEvent: FileSystemEvent? {
 		if case .fileSystem(let event) = self { return event }
+		return nil
+	}
+
+	var watchFailure: (path: FilePath, error: InotifyError)? {
+		if case .watchFailed(let path, let error) = self { return (path, error) }
 		return nil
 	}
 }

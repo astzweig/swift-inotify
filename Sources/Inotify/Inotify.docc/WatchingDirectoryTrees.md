@@ -35,6 +35,27 @@ Internally this listens for `CREATE` and `MOVED_TO` events carrying the ``Inotif
 
 When a directory is moved out of the watched tree, the watches on it and on its subdirectories are removed, so no events are reported under the stale path.
 
+#### When a New Directory Cannot Be Watched
+
+Extending the watch can fail, most often because the user's watch limit, `fs.inotify.max_user_watches`, is reached, or because the process may not read the new directory. No call of yours is running at that moment, so the library watches what it can and reports every directory it could not watch as ``InotifyEvent/watchFailed(path:error:)``, after the event of the directory whose appearance triggered the extension:
+
+```swift
+for await event in await inotify.events {
+    switch event {
+    case .fileSystem(let change):
+        handle(change)
+    case .queueOverflow:
+        rescan()
+    case .watchFailed(let path, let error):
+        log("changes below \(path) go unreported: \(error)")
+    }
+}
+```
+
+A reached limit ends the extension, since nothing more can be watched until watches are freed, so only the first directory that failed is reported. An unreadable directory is reported and skipped together with its subtree, while its readable siblings are watched. A directory that vanished before it could be watched is not reported, because its removal arrives as an event of its own.
+
+The explicit calls above behave differently: they either watch the whole tree or throw, and a call that throws removes the watches it had added.
+
 ### Excluding Directories
 
 When watching large trees you often want to skip certain subdirectories entirely — version-control metadata, build artefacts, dependency caches, and so on. Call ``Inotify/Inotify/exclude(names:)`` or ``Inotify/Inotify/exclude(patterns:)`` **before** adding a recursive or automatic-subtree watch:
