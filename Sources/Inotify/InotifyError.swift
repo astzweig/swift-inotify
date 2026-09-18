@@ -17,9 +17,7 @@ public enum InotifyError: Error, Sendable, CustomStringConvertible {
 	}
 
 	private func readableErrno(_ code: Int32) -> String {
-		if let cStr = get_error_message() {
-			return String(cString: cStr) + " (errno \(code))"
-		}
-		return "errno \(code)"
+		guard let message = cinotify_error_message(code) else { return "errno \(code)" }
+		return String(cString: message) + " (errno \(code))"
 	}
 }
