@@ -9,7 +9,7 @@ public enum DirectoryResolverError: LocalizedError, Equatable {
 	case pathNotFound(FilePath)
 	case pathIsNoDirectory(FilePath)
 
-	var errorDescription: String {
+	public var errorDescription: String? {
 		switch self {
 		case .pathNotFound(let path):
 			return "Path not found: \(path)"
